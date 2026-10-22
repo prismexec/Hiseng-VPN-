@@ -1,4 +1,4 @@
-package best.quasar.vpn
+package com.hiseng.vpn
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -16,8 +16,8 @@ import java.io.FileOutputStream
 class FluxVpnService : VpnService() {
 
     companion object {
-        const val ACTION_CONNECT = "best.quasar.vpn.CONNECT"
-        const val ACTION_DISCONNECT = "best.quasar.vpn.DISCONNECT"
+        const val ACTION_CONNECT = "com.hiseng.vpn.CONNECT"
+        const val ACTION_DISCONNECT = "com.hiseng.vpn.DISCONNECT"
         private const val CHANNEL = "vpn"
         private const val NOTIF_ID = 1
     }

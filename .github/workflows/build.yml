@@ -42,16 +42,16 @@ jobs:
         run: gradle :app:assembleRelease --no-daemon --stacktrace
 
       - name: Rename
-        run: cp app/build/outputs/apk/release/app-release.apk QuasarVPN-${{ github.run_number }}.apk
+        run: cp app/build/outputs/apk/release/app-release.apk HisengVPN-${{ github.run_number }}.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: QuasarVPN-apk
-          path: QuasarVPN-*.apk
+          name: HisengVPN-apk
+          path: HisengVPN-*.apk
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: Quasar VPN ${{ github.run_number }}
-          files: QuasarVPN-*.apk
+          name: Hiseng VPN ${{ github.run_number }}
+          files: HisengVPN-*.apk

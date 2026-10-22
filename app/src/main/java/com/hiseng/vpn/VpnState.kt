@@ -1,4 +1,4 @@
-package best.quasar.vpn
+package com.hiseng.vpn
 
 import android.content.Context
 import android.os.Handler
@@ -45,7 +45,7 @@ object VpnState {
 }
 
 object Prefs {
-    private fun p(c: Context) = c.getSharedPreferences("quasar", Context.MODE_PRIVATE)
+    private fun p(c: Context) = c.getSharedPreferences("hiseng", Context.MODE_PRIVATE)
     fun key(c: Context): String? = p(c).getString("key", null)
     fun setKey(c: Context, k: String) = p(c).edit().putString("key", k).apply()
 }

@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "best.quasar.vpn"
+    namespace = "com.hiseng.vpn"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "best.quasar.vpn"
+        applicationId = "com.hiseng.vpn"
         minSdk = 26
         targetSdk = 35
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
@@ -20,9 +20,9 @@ android {
     signingConfigs {
         create("release") {
             storeFile = file("release.jks")
-            storePassword = "quasar123"
-            keyAlias = "quasar"
-            keyPassword = "quasar123"
+            storePassword = "hiseng123"
+            keyAlias = "hiseng"
+            keyPassword = "hiseng123"
         }
     }
 

@@ -1,4 +1,4 @@
-# Quasar VPN (Android)
+# Hiseng VPN (Android)
 
 Простой клиент OpenFlux: вставить ключ `openflux://…` → нажать кнопку.
 

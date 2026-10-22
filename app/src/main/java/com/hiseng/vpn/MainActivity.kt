@@ -1,4 +1,4 @@
-package best.quasar.vpn
+package com.hiseng.vpn
 
 import android.Manifest
 import android.content.ClipboardManager
@@ -110,7 +110,7 @@ class MainActivity : ComponentActivity() {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
         }
         handleIntent(intent)
-        setContent { QuasarTheme { MainScreen() } }
+        setContent { HisengTheme { MainScreen() } }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -174,7 +174,7 @@ fun stopVpn(c: Context) {
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun QuasarTheme(content: @Composable () -> Unit) {
+fun HisengTheme(content: @Composable () -> Unit) {
     val ctx = LocalContext.current
     val dark = isSystemInDarkTheme()
     val scheme = when {
@@ -253,7 +253,7 @@ fun MainScreen() {
         ) {
             Spacer(Modifier.height(20.dp))
             Text(
-                "Quasar VPN",
+                "Hiseng VPN",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Black,
                 color = MaterialTheme.colorScheme.onSurface
