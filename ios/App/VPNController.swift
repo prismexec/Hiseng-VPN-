@@ -17,6 +17,9 @@ final class VPNController: ObservableObject {
     @Published private(set) var tx: UInt64 = 0
     @Published private(set) var transport = ""
     @Published var toast: String?
+    /// The running tunnel has not answered the last few stats requests.
+    @Published private(set) var tunnelSilent = false
+    private var statsMisses = 0
 
     private var manager: NETunnelProviderManager?
     private var statsTimer: Timer?
@@ -55,12 +58,12 @@ final class VPNController: ObservableObject {
     @discardableResult
     func saveKey(_ raw: String) -> Bool {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let range = text.range(of: "openflux://[^\\s\"'<>]+", options: .regularExpression) else {
-            show("Это не ключ OpenFlux")
+        guard let range = text.range(of: "(?i)(openflux|hiseng)://[^\\s\"'<>]+", options: .regularExpression),
+              let k = Self.coreKey(String(text[range])) else {
+            show("Это не ключ Hiseng VPN")
             haptic(.error)
             return false
         }
-        let k = String(text[range])
         switch KeyProfile.decode(k) {
         case .failure(let f):
             show(f.message)
@@ -77,6 +80,19 @@ final class VPNController: ObservableObject {
             if isActive { stop() }
             return true
         }
+    }
+
+    /// Keys are shown and shared as hiseng://…; the core reads openflux://…
+    /// (the rest of the link is the same).
+    static func coreKey(_ raw: String) -> String? {
+        guard let sep = raw.range(of: "://") else { return nil }
+        let scheme = raw[..<sep.lowerBound].lowercased()
+        guard scheme == "openflux" || scheme == "hiseng" else { return nil }
+        return "openflux://" + raw[sep.upperBound...]
+    }
+
+    var displayKey: String? {
+        key.flatMap { k in k.range(of: "://").map { "hiseng://" + k[$0.upperBound...] } }
     }
 
     func pasteKey() {
@@ -296,6 +312,8 @@ final class VPNController: ObservableObject {
     private func stopStats() {
         statsTimer?.invalidate()
         statsTimer = nil
+        statsMisses = 0
+        tunnelSilent = false
         rx = 0
         tx = 0
         transport = ""
@@ -304,6 +322,8 @@ final class VPNController: ObservableObject {
     private func pollStats() {
         guard let session = manager?.connection as? NETunnelProviderSession,
               let msg = Shared.messageStats.data(using: .utf8) else { return }
+        statsMisses += 1
+        if statsMisses >= 4 { tunnelSilent = true }
         try? session.sendProviderMessage(msg) { data in
             guard let data = data,
                   let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return }
@@ -317,6 +337,8 @@ final class VPNController: ObservableObject {
                     self.tunnelFailed(err, log: log)
                     return
                 }
+                self.statsMisses = 0
+                self.tunnelSilent = false
                 self.rx = rx
                 self.tx = tx
                 self.transport = transport

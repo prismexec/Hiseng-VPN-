@@ -122,16 +122,25 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(i: Intent?) {
         val data = i?.dataString ?: return
-        if (data.startsWith("openflux://")) KeyStore.save(this, data)
+        if (KeyStore.find(data) != null) KeyStore.save(this, data)
     }
 }
 
 /** Key checks and saving, shared by the screen and deep links. */
 object KeyStore {
+    /** A key in [raw], as the core reads it: hiseng://… is shown to people,
+     *  openflux://… is the same link for the core. */
+    fun find(raw: String): String? {
+        val m = Regex("(?i)(openflux|hiseng)://(\\S+)").find(raw) ?: return null
+        return "openflux://" + m.groupValues[2]
+    }
+
+    fun display(key: String): String = "hiseng://" + key.substringAfter("://")
+
     fun save(c: Context, raw: String): Boolean {
-        val key = Regex("openflux://\\S+").find(raw)?.value
+        val key = find(raw)
         if (key == null) {
-            toast(c, "Это не ключ OpenFlux")
+            toast(c, "Это не ключ Hiseng VPN")
             return false
         }
         try {
@@ -367,7 +376,7 @@ fun MainScreen() {
     }
 
     if (showDialog) {
-        var text by remember { mutableStateOf(Prefs.key(ctx) ?: "") }
+        var text by remember { mutableStateOf(Prefs.key(ctx)?.let { KeyStore.display(it) } ?: "") }
         AlertDialog(
             onDismissRequest = { showDialog = false },
             title = { Text("Ключ") },
@@ -375,7 +384,7 @@ fun MainScreen() {
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
-                    placeholder = { Text("openflux://…") },
+                    placeholder = { Text("hiseng://…") },
                     shape = RoundedCornerShape(16.dp),
                     maxLines = 5
                 )
@@ -509,7 +518,7 @@ fun KeyCard(title: Pair<String, String>?, onPaste: () -> Unit, onEnter: () -> Un
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        title?.second?.ifBlank { null } ?: "Скопируйте ключ openflux:// и вставьте",
+                        title?.second?.ifBlank { null } ?: "Скопируйте ключ hiseng:// и вставьте",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2,

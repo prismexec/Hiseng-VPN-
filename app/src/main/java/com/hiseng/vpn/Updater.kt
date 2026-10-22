@@ -15,7 +15,8 @@ import java.net.URL
 
 /** Over-the-air updates: newer APKs from the GitHub releases (tags build-N). */
 object Updater {
-    private const val REPO = "prismexec/Hiseng-VPN-"
+    /** Public releases repo first; the main repo answers once it is public. */
+    private val REPOS = listOf("prismexec/hiseng-vpn-releases", "prismexec/Hiseng-VPN-")
 
     data class Release(val build: Int, val apkUrl: String, val page: String)
 
@@ -65,12 +66,19 @@ object Updater {
         set(State.Checking)
         Thread({
             try {
-                val conn = URL("https://api.github.com/repos/$REPO/releases?per_page=30")
-                    .openConnection() as HttpURLConnection
-                conn.setRequestProperty("Accept", "application/vnd.github+json")
-                conn.connectTimeout = 15000
-                conn.readTimeout = 15000
-                val arr = JSONArray(conn.inputStream.bufferedReader().use { it.readText() })
+                val arr = REPOS.firstNotNullOfOrNull { repo ->
+                    try {
+                        val conn = URL("https://api.github.com/repos/$repo/releases?per_page=30")
+                            .openConnection() as HttpURLConnection
+                        conn.setRequestProperty("Accept", "application/vnd.github+json")
+                        conn.connectTimeout = 15000
+                        conn.readTimeout = 15000
+                        if (conn.responseCode != 200) null
+                        else JSONArray(conn.inputStream.bufferedReader().use { it.readText() })
+                    } catch (_: Throwable) {
+                        null
+                    }
+                } ?: throw IllegalStateException("no releases")
                 var best: Release? = null
                 for (i in 0 until arr.length()) {
                     val r = arr.getJSONObject(i)
@@ -100,7 +108,7 @@ object Updater {
                 }
             } catch (_: Throwable) {
                 set(if (release != null) State.Available else State.Idle)
-                onDone?.let { cb -> main.post { cb("Нет связи с GitHub") } }
+                onDone?.let { cb -> main.post { cb("Сервер обновлений пока недоступен") } }
             }
         }, "update-check").start()
     }

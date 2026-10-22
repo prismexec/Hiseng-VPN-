@@ -41,7 +41,7 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         CFBundleURLTypes:
           - CFBundleURLName: com.hiseng.vpn.link
-            CFBundleURLSchemes: [openflux]
+            CFBundleURLSchemes: [hiseng, openflux]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.hiseng.vpn

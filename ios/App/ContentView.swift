@@ -35,7 +35,8 @@ struct ContentView: View {
                         }
 
                         if vpn.state == .on {
-                            ConnectedGroup(rx: vpn.rx, tx: vpn.tx, transport: vpn.transport)
+                            ConnectedGroup(rx: vpn.rx, tx: vpn.tx,
+                                           transport: vpn.tunnelSilent ? "Туннель не отвечает — откройте журнал" : vpn.transport)
                                 .padding(.top, 28)
                                 .transition(.asymmetric(
                                     insertion: .scale(scale: 0.92, anchor: .top).combined(with: .opacity),
@@ -74,7 +75,7 @@ struct ContentView: View {
 
             if confirmDelete {
                 M3Dialog(icon: "trash", title: "Удалить ключ?",
-                         text: "VPN отключится. Чтобы подключиться снова, понадобится ключ openflux://.",
+                         text: "VPN отключится. Чтобы подключиться снова, понадобится ключ hiseng://.",
                          confirm: "Удалить", destructive: true,
                          onConfirm: { confirmDelete = false; vpn.deleteKey() },
                          onDismiss: { confirmDelete = false })
@@ -243,7 +244,7 @@ struct ContentView: View {
                 Menu {
                     Button { showEnter = true } label: { Label("Заменить ключ", systemImage: "pencil") }
                     Button {
-                        UIPasteboard.general.string = vpn.key
+                        UIPasteboard.general.string = vpn.displayKey
                         vpn.show("Ключ скопирован")
                     } label: { Label("Скопировать ключ", systemImage: "doc.on.doc") }
                     Button(role: .destructive) { confirmDelete = true } label: {
@@ -262,7 +263,7 @@ struct ContentView: View {
     }
 
     private var keyDetail: String {
-        guard let p = vpn.profile else { return "Скопируйте ключ openflux:// и вставьте" }
+        guard let p = vpn.profile else { return "Скопируйте ключ hiseng:// и вставьте" }
         if p.mode == "stream" { return "PHP-узел" }
         let n = p.transports.count
         let word = n % 10 == 1 && n % 100 != 11 ? "канал"
@@ -399,10 +400,11 @@ struct ConnectedGroup: View {
     }
 
     static func bytes(_ n: UInt64) -> String {
-        let f = ByteCountFormatter()
-        f.countStyle = .binary
-        f.allowedUnits = [.useKB, .useMB, .useGB]
-        return f.string(fromByteCount: Int64(clamping: n))
+        let v = Double(n)
+        if v < 1024 { return "\(n) Б" }
+        if v < 1024 * 1024 { return String(format: "%.0f КБ", v / 1024) }
+        if v < 1024 * 1024 * 1024 { return String(format: "%.1f МБ", v / 1_048_576) }
+        return String(format: "%.2f ГБ", v / 1_073_741_824)
     }
 }
 
@@ -504,7 +506,7 @@ struct EnterKeySheet: View {
             Text("Новый ключ")
                 .font(.m3(.headlineSmall))
                 .foregroundColor(M3.onSurface)
-            Text("Вставьте ключ openflux://, который выдал сервер")
+            Text("Вставьте ключ hiseng:// (или openflux://), который выдал сервер")
                 .font(.m3(.bodyMedium))
                 .foregroundColor(M3.onSurfaceVariant)
                 .padding(.top, 6)
@@ -555,7 +557,7 @@ struct EnterKeySheet: View {
         .padding(.horizontal, 24)
         .background(M3.surfaceContainerLow.ignoresSafeArea())
         .onAppear {
-            text = vpn.key ?? ""
+            text = vpn.displayKey ?? ""
             focused = true
         }
     }
@@ -671,6 +673,8 @@ struct AboutSection: View {
                             LoadingIndicator(color: M3.onSecondaryContainer).frame(width: 22, height: 22)
                         } else {
                             Text("Проверить")
+                                .lineLimit(1)
+                                .fixedSize()
                         }
                     }
                     .buttonStyle(M3Button(.tonal, height: 40, fill: false))

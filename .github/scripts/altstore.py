@@ -9,7 +9,7 @@ import json
 import os
 import sys
 
-REPO = "prismexec/Hiseng-VPN-"
+REPO = os.environ.get("SOURCE_REPO", "prismexec/Hiseng-VPN-")
 build, version, ipa = sys.argv[1], sys.argv[2], sys.argv[3]
 name = os.path.basename(ipa)
 size = os.path.getsize(ipa)
