@@ -2,6 +2,8 @@ name: Core memory check
 
 on:
   workflow_dispatch:
+  push:
+    paths: [ 'tools/memcheck/**', '.github/workflows/memcheck.yml' ]
 
 jobs:
   memcheck:
