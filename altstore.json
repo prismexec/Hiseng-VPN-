@@ -9,14 +9,13 @@
       "name": "Hiseng VPN",
       "bundleIdentifier": "com.hiseng.vpn",
       "developerName": "Hiseng",
-      "subtitle": "VPN на OpenFlux",
-      "localizedDescription": "VPN-клиент OpenFlux: вставьте ключ openflux:// и нажмите кнопку.",
+      "subtitle": "Простой VPN",
+      "localizedDescription": "VPN-клиент: вставьте ключ hiseng:// и нажмите кнопку.",
       "iconURL": "https://raw.githubusercontent.com/prismexec/Hiseng-VPN-/main/ios/App/Assets.xcassets/AppIcon.appiconset/icon-1024.png",
       "tintColor": "#6750A4",
       "versions": [
         {
           "version": "1.2.11",
-          "buildVersion": "11",
           "date": "2026-10-22T22:20:46Z",
           "localizedDescription": "Сборка 11",
           "downloadURL": "https://github.com/prismexec/Hiseng-VPN-/releases/download/ios-11/HisengVPN-ios-11.ipa",
@@ -24,11 +23,7 @@
           "minOSVersion": "15.0"
         }
       ],
-      "version": "1.2.11",
-      "versionDate": "2026-10-22T22:20:46Z",
-      "versionDescription": "Сборка 11",
-      "downloadURL": "https://github.com/prismexec/Hiseng-VPN-/releases/download/ios-11/HisengVPN-ios-11.ipa",
-      "size": 24097509
+      "screenshotURLs": []
     }
   ],
   "news": [],

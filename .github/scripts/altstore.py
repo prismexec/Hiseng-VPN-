@@ -29,19 +29,13 @@ app = {
     "tintColor": "#6750A4",
     "versions": [{
         "version": version,
-        "buildVersion": build,
         "date": date,
         "localizedDescription": notes,
         "downloadURL": url,
         "size": size,
         "minOSVersion": "15.0",
     }],
-    # Fields older readers (ESign, Feather) use.
-    "version": version,
-    "versionDate": date,
-    "versionDescription": notes,
-    "downloadURL": url,
-    "size": size,
+    "screenshotURLs": [],
 }
 
 json.dump({
