@@ -4,6 +4,7 @@
   "subtitle": "Обновления Hiseng VPN",
   "iconURL": "https://raw.githubusercontent.com/prismexec/Hiseng-VPN-/main/ios/App/Assets.xcassets/AppIcon.appiconset/icon-1024.png",
   "tintColor": "#6750A4",
+  "website": "https://github.com/prismexec/Hiseng-VPN-",
   "apps": [
     {
       "name": "Hiseng VPN",
@@ -15,17 +16,16 @@
       "tintColor": "#6750A4",
       "versions": [
         {
-          "version": "1.2.11",
-          "date": "2026-10-22T22:20:46Z",
-          "localizedDescription": "Сборка 11",
-          "downloadURL": "https://github.com/prismexec/Hiseng-VPN-/releases/download/ios-11/HisengVPN-ios-11.ipa",
-          "size": 24097509,
+          "version": "1.2.12",
+          "date": "2026-10-22T22:28:13Z",
+          "localizedDescription": "Сборка 12",
+          "downloadURL": "https://github.com/prismexec/Hiseng-VPN-/releases/download/ios-12/HisengVPN-ios-12.ipa",
+          "size": 24097343,
           "minOSVersion": "15.0"
         }
       ],
       "screenshotURLs": []
     }
   ],
-  "news": [],
-  "website": "https://github.com/prismexec/Hiseng-VPN-"
+  "news": []
 }
