@@ -3,3 +3,8 @@ app/build/
 build/
 app/libs/*.aar
 local.properties
+ios/build/
+ios/Payload/
+ios/*.xcodeproj/
+ios/Lib/*.a
+ios/Lib/*.h
