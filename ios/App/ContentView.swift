@@ -11,41 +11,47 @@ struct ContentView: View {
         ZStack(alignment: .bottom) {
             M3.surface.ignoresSafeArea()
 
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 0) {
-                    topBar
+            VStack(spacing: 0) {
+                topBar
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+                    .background(M3.surface.ignoresSafeArea(edges: .top))
+                    .zIndex(1)
 
-                    HeroButton(state: vpn.state) { vpn.toggle() }
-                        .frame(width: 300, height: 300)
-                        .padding(.top, 12)
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        HeroButton(state: vpn.state) { vpn.toggle() }
+                            .frame(width: 300, height: 300)
+                            .padding(.top, 12)
 
-                    statusBlock
-                        .padding(.top, 12)
+                        statusBlock
+                            .padding(.top, 12)
 
-                    if vpn.state == .on {
-                        ConnectedGroup(rx: vpn.rx, tx: vpn.tx, transport: vpn.transport)
+                        if vpn.state == .on {
+                            ConnectedGroup(rx: vpn.rx, tx: vpn.tx, transport: vpn.transport)
+                                .padding(.top, 28)
+                                .transition(.asymmetric(
+                                    insertion: .scale(scale: 0.92, anchor: .top).combined(with: .opacity),
+                                    removal: .opacity))
+                        }
+
+                        if vpn.state == .error, let err = vpn.errorText {
+                            ErrorCard(text: err) { showLog = true }
+                                .padding(.top, 28)
+                                .transition(.scale(scale: 0.94, anchor: .top).combined(with: .opacity))
+                        }
+
+                        keySection
+                            .padding(.top, 32)
+
+                        Text("Hiseng VPN \(Self.version) · на основе OpenFlux")
+                            .font(.m3(.bodySmall))
+                            .foregroundColor(M3.onSurfaceVariant.opacity(0.7))
                             .padding(.top, 28)
-                            .transition(.asymmetric(
-                                insertion: .scale(scale: 0.92, anchor: .top).combined(with: .opacity),
-                                removal: .opacity))
                     }
-
-                    if vpn.state == .error, let err = vpn.errorText {
-                        ErrorCard(text: err) { showLog = true }
-                            .padding(.top, 28)
-                            .transition(.scale(scale: 0.94, anchor: .top).combined(with: .opacity))
-                    }
-
-                    keySection
-                        .padding(.top, 32)
-
-                    Text("Hiseng VPN \(Self.version) · на основе OpenFlux")
-                        .font(.m3(.bodySmall))
-                        .foregroundColor(M3.onSurfaceVariant.opacity(0.7))
-                        .padding(.top, 28)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 100)
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 100)
             }
 
             if let t = vpn.toast {
@@ -161,6 +167,7 @@ struct ContentView: View {
     private var subtitle: String {
         switch vpn.state {
         case .off: return vpn.key == nil ? "Добавьте ключ ниже" : "Нажмите, чтобы подключиться"
+        case .error: return "Нажмите, чтобы попробовать снова"
         default: return vpn.message
         }
     }
@@ -292,15 +299,6 @@ struct HeroButton: View {
         }
     }
 
-    private var backdrop: MShape {
-        switch state {
-        case .off: return .sunny
-        case .connecting, .reconnecting, .disconnecting: return .verySunny
-        case .on: return .flower
-        case .error: return .clover4
-        }
-    }
-
     private var container: Color {
         switch state {
         case .off: return M3.surfaceContainerHighest
@@ -332,10 +330,6 @@ struct HeroButton: View {
         TimelineView(.animation) { ctx in
             let a = spinner.advance(to: ctx.date.timeIntervalSinceReferenceDate, target: speed)
             ZStack {
-                MorphShape(backdrop)
-                    .fill(container.opacity(0.35))
-                    .rotationEffect(.degrees(-a * 0.6))
-
                 Button(action: action) {
                     ZStack {
                         MorphShape(shape)

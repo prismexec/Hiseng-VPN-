@@ -4,8 +4,8 @@ import NetworkExtension
 /// core and moves IP packets between iOS and the core.
 ///
 /// iOS reports any failure here only as a generic "internal error", so the
-/// real reason and the core's log go to the app group (and are answered to
-/// the app's messages while the tunnel runs).
+/// real reason and the core's log go to the app group and, since a
+/// re-signed app may have no app group, to the app's messages too.
 final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     private let lock = NSLock()
@@ -17,24 +17,29 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var recent: [String] = []
     private var monitor: DispatchSourceTimer?
     private var transport = ""
+    /// Why the start failed; the tunnel stays up without routes for a while
+    /// so the app can ask.
+    private var failure: String?
 
     // MARK: start / stop
 
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
         Shared.resetLog()
         Shared.writeError(nil)
-        note("Запуск туннеля")
+        note("Запуск туннеля, iOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
+        let sign = Signing.current
+        note("Подпись туннеля: право на VPN — \(sign?.hasPacketTunnel == true ? "есть" : "НЕТ"), группа \(Shared.groupID) — \(Shared.groupAvailable ? "доступна" : "недоступна")")
 
         let conf = (protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration ?? [:]
         guard let link = conf["link"] as? String, link.hasPrefix("openflux://") else {
-            finish(completionHandler, "Нет ключа. Добавьте ключ в приложении.")
+            softFail(completionHandler, "Нет ключа. Добавьте ключ в приложении.")
             return
         }
         let profile: KeyProfile
         switch KeyProfile.decode(link) {
         case .success(let p): profile = p
         case .failure(let f):
-            finish(completionHandler, f.message)
+            softFail(completionHandler, f.message)
             return
         }
         note("Профиль «\(profile.name)», каналы: \(profile.transports.joined(separator: ", "))")
@@ -43,6 +48,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         // 10.10.10.2 is the address every exit answers to.
         let ipv4 = NEIPv4Settings(addresses: ["10.10.10.2"], subnetMasks: ["255.255.255.0"])
         ipv4.includedRoutes = [NEIPv4Route.default()]
+        // The exit itself and the DNS-over-TLS resolvers go around the
+        // tunnel, so the core's own connections can never loop into it.
+        let bypass = Self.bypassAddresses(profile)
+        ipv4.excludedRoutes = bypass.map { NEIPv4Route(destinationAddress: $0, subnetMask: "255.255.255.255") }
+        note("В обход туннеля: \(bypass.joined(separator: ", "))")
         settings.ipv4Settings = ipv4
         settings.mtu = 1280
         // Queries to this address are answered by the core over DNS-over-TLS.
@@ -53,7 +63,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         setTunnelNetworkSettings(settings) { [weak self] error in
             guard let self = self else { return }
             if let error = error {
-                self.finish(completionHandler, "iOS не принял настройки сети: \(error.localizedDescription)")
+                self.softFail(completionHandler, "iOS не принял настройки сети: \(error.localizedDescription)")
                 return
             }
             // Connecting to the carriers can take a while: off the callback queue.
@@ -61,7 +71,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 let rc = self.startCore(profile)
                 self.drainCoreLog()
                 if rc != 0 {
-                    self.finish(completionHandler, self.describeStart(rc))
+                    self.softFail(completionHandler, self.describeStart(rc))
                     return
                 }
                 self.lock.lock()
@@ -215,14 +225,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             drainCoreLog()
             completionHandler?(recentLines().joined(separator: "\n").data(using: .utf8))
         default:
+            drainCoreLog()
             lock.lock()
-            let info: [String: Any] = [
+            var info: [String: Any] = [
                 "rx": rx,
                 "tx": tx,
                 "connected": OpenFluxPacketTunnelConnected() != 0,
                 "transport": KeyProfile.prettyTransport(transport),
                 "since": startedAt?.timeIntervalSince1970 ?? 0,
             ]
+            if let failure = failure {
+                info["error"] = failure
+                info["log"] = recent.suffix(300).joined(separator: "\n")
+            }
             lock.unlock()
             completionHandler?(try? JSONSerialization.data(withJSONObject: info))
         }
@@ -263,10 +278,67 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         return recent
     }
 
-    private func finish(_ completion: (Error?) -> Void, _ message: String) {
+    /// A failed start. iOS would only say "internal error" and the app group
+    /// may be missing after re-signing, so the tunnel comes up without any
+    /// routes, answers the app with the reason, and stops by itself.
+    private func softFail(_ completion: @escaping (Error?) -> Void, _ message: String) {
         drainCoreLog()
         note("Ошибка: \(message)")
         Shared.writeError(message)
-        completion(NSError(domain: "HisengVPN", code: 1, userInfo: [NSLocalizedDescriptionKey: message]))
+        lock.lock()
+        failure = message
+        lock.unlock()
+        let s = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "127.0.0.1")
+        let v4 = NEIPv4Settings(addresses: ["10.10.10.2"], subnetMasks: ["255.255.255.255"])
+        v4.includedRoutes = []
+        s.ipv4Settings = v4
+        setTunnelNetworkSettings(s) { [weak self] _ in
+            completion(nil)
+            DispatchQueue.global().asyncAfter(deadline: .now() + 15) {
+                self?.cancelTunnelWithError(NSError(domain: "HisengVPN", code: 1,
+                                                    userInfo: [NSLocalizedDescriptionKey: message]))
+            }
+        }
+    }
+
+    /// IPv4 addresses that must not enter the tunnel: the exit a "direct"
+    /// carrier dials and the core's DNS-over-TLS resolvers.
+    private static func bypassAddresses(_ p: KeyProfile) -> [String] {
+        var out = ["77.88.8.8", "8.8.8.8", "1.1.1.1"]
+        for dial in p.dials {
+            var host = dial
+            if let i = dial.lastIndex(of: ":"), !dial.hasPrefix("[") {
+                host = String(dial[..<i])
+            }
+            for ip in ipv4(of: host) where !out.contains(ip) {
+                out.append(ip)
+            }
+        }
+        return out
+    }
+
+    private static func ipv4(of host: String) -> [String] {
+        var a = in_addr()
+        if inet_pton(AF_INET, host, &a) == 1 { return [host] }
+        var hints = addrinfo()
+        hints.ai_family = AF_INET
+        hints.ai_socktype = SOCK_STREAM
+        var res: UnsafeMutablePointer<addrinfo>?
+        guard getaddrinfo(host, nil, &hints, &res) == 0, let first = res else { return [] }
+        defer { freeaddrinfo(first) }
+        var out: [String] = []
+        var p: UnsafeMutablePointer<addrinfo>? = first
+        while let ai = p {
+            if ai.pointee.ai_family == AF_INET, let sa = ai.pointee.ai_addr {
+                var addr = sa.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee.sin_addr }
+                var buf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+                if inet_ntop(AF_INET, &addr, &buf, socklen_t(INET_ADDRSTRLEN)) != nil {
+                    let ip = String(cString: buf)
+                    if !out.contains(ip) { out.append(ip) }
+                }
+            }
+            p = ai.pointee.ai_next
+        }
+        return out
     }
 }

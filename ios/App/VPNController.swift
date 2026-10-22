@@ -24,11 +24,14 @@ final class VPNController: ObservableObject {
     /// Set once iOS reports this start as connecting: a "disconnected" before
     /// that is the profile being saved, not a failure.
     private var sawConnecting = false
+    /// Bumped per check of a fresh connection, so only one answer counts.
+    private var verifyToken = 0
+    /// What the tunnel told about its failed start (its log).
+    private var lastTunnelLog: String?
 
-    /// The extension's id follows the app's, so re-signing with another
-    /// bundle id keeps them paired.
+    /// The tunnel extension as installed: re-signing may change its id.
     private var extensionBundleId: String {
-        (Bundle.main.bundleIdentifier ?? "com.hiseng.vpn") + ".tunnel"
+        Diagnostics.tunnel?.bundleID ?? (Bundle.main.bundleIdentifier ?? "com.hiseng.vpn") + ".tunnel"
     }
 
     init() {
@@ -117,6 +120,7 @@ final class VPNController: ObservableObject {
         message = "Подключаемся…"
         errorText = nil
         sawConnecting = false
+        lastTunnelLog = nil
         Shared.writeError(nil)
         Task {
             let m = manager ?? NETunnelProviderManager()
@@ -145,12 +149,20 @@ final class VPNController: ObservableObject {
 
     private func refresh() {
         guard let conn = manager?.connection else { return }
+        // The error on screen stays while the tunnel winds down.
+        if state == .error && (conn.status == .disconnecting || conn.status == .disconnected || conn.status == .invalid) {
+            stopStats()
+            connectedSince = nil
+            return
+        }
         switch conn.status {
         case .connected:
-            state = .on
-            message = "Трафик защищён"
             connectedSince = conn.connectedDate ?? Date()
-            startStats()
+            if state == .on {
+                startStats()
+            } else if state != .error {
+                verify(conn)
+            }
         case .connecting:
             sawConnecting = true
             state = .connecting
@@ -184,6 +196,10 @@ final class VPNController: ObservableObject {
             fail(own)
             return
         }
+        if let problem = Diagnostics.problem() {
+            fail(problem)
+            return
+        }
         if #available(iOS 16.0, *) {
             conn.fetchLastDisconnectError { err in
                 Task { @MainActor in
@@ -196,7 +212,7 @@ final class VPNController: ObservableObject {
                 }
             }
         } else {
-            fail("Туннель не запустился. Откройте журнал, чтобы узнать причину.")
+            fail("Туннель не запустился и ничего не сообщил. Откройте журнал — там диагностика подписи.")
         }
     }
 
@@ -211,9 +227,58 @@ final class VPNController: ObservableObject {
         let ns = error as NSError
         var text = ns.localizedDescription
         if ns.domain.hasPrefix("NEVPN") {
-            text += "\n\nТуннель завершился без объяснения. Чаще всего так бывает, если приложение подписано без права на VPN (Network Extension) — например, бесплатным Apple ID — или если туннелю не хватило памяти. Подробности в журнале."
+            text += "\n\nМодуль туннеля завершился, не успев ничего сообщить: iOS не дала ему запуститься или он упал при старте. Подпись приложения выглядит нормально — откройте журнал и пришлите его вместе с диагностикой."
         }
         return text
+    }
+
+    // MARK: check of a fresh connection
+
+    /// iOS says "connected" also when the tunnel came up only to report a
+    /// failed start (see the provider): ask it before showing "connected".
+    private func verify(_ conn: NEVPNConnection) {
+        verifyToken += 1
+        let token = verifyToken
+        state = .connecting
+        message = "Проверяем соединение…"
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            self?.verified(token, error: nil, log: nil)
+        }
+        guard let session = conn as? NETunnelProviderSession,
+              let msg = Shared.messageStats.data(using: .utf8) else {
+            verified(token, error: nil, log: nil)
+            return
+        }
+        do {
+            try session.sendProviderMessage(msg) { data in
+                let json = data.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
+                let err = json?["error"] as? String
+                let log = json?["log"] as? String
+                Task { @MainActor in self.verified(token, error: err, log: log) }
+            }
+        } catch {
+            verified(token, error: nil, log: nil)
+        }
+    }
+
+    private func verified(_ token: Int, error: String?, log: String?) {
+        guard token == verifyToken else { return }
+        verifyToken += 1
+        if let error = error {
+            tunnelFailed(error, log: log)
+            return
+        }
+        guard manager?.connection.status == .connected else { return }
+        state = .on
+        message = "Трафик защищён"
+        startStats()
+    }
+
+    private func tunnelFailed(_ error: String, log: String?) {
+        if let log = log, !log.isEmpty { lastTunnelLog = log }
+        fail(error)
+        stop()
     }
 
     // MARK: stats
@@ -243,7 +308,13 @@ final class VPNController: ObservableObject {
             let rx = (json["rx"] as? NSNumber)?.uint64Value ?? 0
             let tx = (json["tx"] as? NSNumber)?.uint64Value ?? 0
             let transport = json["transport"] as? String ?? ""
+            let err = json["error"] as? String
+            let log = json["log"] as? String
             Task { @MainActor in
+                if let err = err {
+                    self.tunnelFailed(err, log: log)
+                    return
+                }
                 self.rx = rx
                 self.tx = tx
                 self.transport = transport
@@ -251,27 +322,32 @@ final class VPNController: ObservableObject {
         }
     }
 
-    /// The tunnel's log: live from the running tunnel, else the app group file.
+    /// Signing diagnostics plus the tunnel's log: live from the running
+    /// tunnel, else the app group file, else what the tunnel sent on failure.
     func fetchLog(_ done: @escaping (String) -> Void) {
-        let fallback = Shared.readLog() ?? ""
+        let head = Diagnostics.report() + "\n\n=== Журнал туннеля ===\n"
+        let stored = [Shared.readLog() ?? "", lastTunnelLog ?? ""].max { $0.count < $1.count } ?? ""
+        let finish: (String) -> Void = { body in
+            done(head + (body.isEmpty ? Self.emptyLog : body))
+        }
         guard isActive,
               let session = manager?.connection as? NETunnelProviderSession,
               let msg = Shared.messageLog.data(using: .utf8) else {
-            done(fallback.isEmpty ? Self.emptyLog : fallback)
+            finish(stored)
             return
         }
         do {
             try session.sendProviderMessage(msg) { data in
                 let live = data.map { String(decoding: $0, as: UTF8.self) } ?? ""
-                let text = live.count >= fallback.count ? live : fallback
-                Task { @MainActor in done(text.isEmpty ? Self.emptyLog : text) }
+                let text = live.count >= stored.count ? live : stored
+                Task { @MainActor in finish(text) }
             }
         } catch {
-            done(fallback.isEmpty ? Self.emptyLog : fallback)
+            finish(stored)
         }
     }
 
-    static let emptyLog = "Журнал пуст. Он появится после первой попытки подключения.\n\nЕсли журнал остаётся пустым после ошибки, туннель не смог даже запуститься: проверьте, что приложение подписано с правом на VPN (Network Extension)."
+    static let emptyLog = "Пусто: туннель ещё не запускался или не смог передать журнал."
 
     // MARK: feedback
 

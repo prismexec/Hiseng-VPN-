@@ -3,10 +3,19 @@ import Foundation
 /// Code shared by the app and the tunnel extension: the key decoder and the
 /// files both sides read through the app group (last error, tunnel log).
 enum Shared {
-    /// App group of the app and the extension. Without the entitlement
-    /// (some re-signing tools drop it) the container is nil and the app falls
-    /// back to messages sent to the running tunnel.
-    static let groupID = "group.com.hiseng.vpn"
+    /// App group of the app and the extension: the one this binary is
+    /// actually signed with (re-signing tools rename it), else ours. Without
+    /// the entitlement the container is nil and the app falls back to
+    /// messages sent to the running tunnel.
+    static let groupID: String = Signing.current?.groups.first ?? "group.com.hiseng.vpn"
+
+    static var groupAvailable: Bool {
+        guard let url = container else { return false }
+        let probe = url.appendingPathComponent(".probe")
+        guard (try? Data("1".utf8).write(to: probe, options: .atomic)) != nil else { return false }
+        try? FileManager.default.removeItem(at: probe)
+        return true
+    }
 
     /// Messages the app sends to the running tunnel.
     static let messageStats = "stats"
@@ -90,6 +99,8 @@ struct KeyProfile {
     var mode: String
     var streamType: String
     var streamURL: String
+    /// host:port of every carrier that dials the exit itself ("direct").
+    var dials: [String]
 
     struct Failure: Error {
         let message: String
@@ -138,7 +149,8 @@ struct KeyProfile {
             session: session,
             mode: mode,
             streamType: first["type"] as? String ?? "",
-            streamURL: first["url"] as? String ?? ""
+            streamURL: first["url"] as? String ?? "",
+            dials: list.compactMap { ($0["dial"] as? String).flatMap { $0.isEmpty ? nil : $0 } }
         )
         if mode != "stream" && session.isEmpty {
             return .failure(Failure(message: "В ключе нет профиля подключения"))
@@ -172,5 +184,58 @@ struct KeyProfile {
         case "direct": return "Напрямую"
         default: return t
         }
+    }
+}
+
+/// What a binary is really signed with: the entitlements in its code
+/// signature. Sideloading tools re-sign apps and may drop the VPN right or
+/// rename the app group, which iOS only reports as an "internal error".
+struct Signing {
+    var entitlements: [String: Any]
+
+    var groups: [String] {
+        entitlements["com.apple.security.application-groups"] as? [String] ?? []
+    }
+
+    var networkExtension: [String] {
+        entitlements["com.apple.developer.networking.networkextension"] as? [String] ?? []
+    }
+
+    var hasPacketTunnel: Bool {
+        networkExtension.contains { $0.hasPrefix("packet-tunnel-provider") }
+    }
+
+    var teamID: String? {
+        entitlements["com.apple.developer.team-identifier"] as? String
+    }
+
+    /// This process's own binary.
+    static let current: Signing? = Bundle.main.executableURL.flatMap { read(executable: $0) }
+
+    /// Reads the entitlements blob (magic 0xfade7171) from the end of a
+    /// Mach-O, where the code signature lives.
+    static func read(executable url: URL) -> Signing? {
+        guard let h = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { h.closeFile() }
+        let size = h.seekToEndOfFile()
+        let window: UInt64 = 4 << 20
+        h.seek(toFileOffset: size > window ? size - window : 0)
+        let data = h.readDataToEndOfFile()
+        let magic: [UInt8] = [0xFA, 0xDE, 0x71, 0x71]
+        var i = data.startIndex
+        while let r = data.range(of: Data(magic), in: i..<data.endIndex) {
+            let lenStart = r.upperBound
+            guard lenStart + 4 <= data.endIndex else { break }
+            let len = data[lenStart..<lenStart + 4].reduce(0) { ($0 << 8) | Int($1) }
+            let bodyStart = lenStart + 4
+            let bodyEnd = r.lowerBound + len
+            if len > 8, bodyEnd <= data.endIndex,
+               let plist = try? PropertyListSerialization.propertyList(
+                   from: data[bodyStart..<bodyEnd], options: [], format: nil) as? [String: Any] {
+                return Signing(entitlements: plist)
+            }
+            i = r.upperBound
+        }
+        return nil
     }
 }
