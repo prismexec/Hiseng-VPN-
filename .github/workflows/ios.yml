@@ -42,7 +42,7 @@ jobs:
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
-            build > build.log 2>&1 || { grep -E "error:|warning: .*swift" build.log | head -80; tail -40 build.log; exit 1; }
+            build > build.log 2>&1 || { grep -E -A3 "\.(swift|h|m):[0-9]+:[0-9]+: error|ld: |Undefined symbols" build.log | cut -c1-400 | head -120; tail -8 build.log | cut -c1-300; exit 1; }
           grep -E "\.swift:[0-9]+:[0-9]+: warning" build.log | sort -u | head -40 || true
           tail -5 build.log
           test -d build/Build/Products/Release-iphoneos/HisengVPN.app

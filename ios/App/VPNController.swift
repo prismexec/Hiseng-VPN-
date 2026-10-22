@@ -210,7 +210,7 @@ final class VPNController: ObservableObject {
     private func describeSystem(_ error: Error) -> String {
         let ns = error as NSError
         var text = ns.localizedDescription
-        if ns.domain == NEVPNConnectionErrorDomain || ns.domain == NEVPNErrorDomain {
+        if ns.domain.hasPrefix("NEVPN") {
             text += "\n\nТуннель завершился без объяснения. Чаще всего так бывает, если приложение подписано без права на VPN (Network Extension) — например, бесплатным Apple ID — или если туннелю не хватило памяти. Подробности в журнале."
         }
         return text
