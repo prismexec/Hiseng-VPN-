@@ -1,0 +1,176 @@
+import Foundation
+
+/// Code shared by the app and the tunnel extension: the key decoder and the
+/// files both sides read through the app group (last error, tunnel log).
+enum Shared {
+    /// App group of the app and the extension. Without the entitlement
+    /// (some re-signing tools drop it) the container is nil and the app falls
+    /// back to messages sent to the running tunnel.
+    static let groupID = "group.com.hiseng.vpn"
+
+    /// Messages the app sends to the running tunnel.
+    static let messageStats = "stats"
+    static let messageLog = "log"
+
+    private static var container: URL? {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupID)
+    }
+
+    private static var errorURL: URL? { container?.appendingPathComponent("last_error.txt") }
+    private static var logURL: URL? { container?.appendingPathComponent("tunnel.log") }
+
+    // MARK: last error
+
+    static func writeError(_ text: String?) {
+        guard let url = errorURL else { return }
+        if let text = text, !text.isEmpty {
+            try? text.data(using: .utf8)?.write(to: url, options: .atomic)
+        } else {
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
+    static func readError() -> String? {
+        guard let url = errorURL, let data = try? Data(contentsOf: url) else { return nil }
+        let s = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        return s.isEmpty ? nil : s
+    }
+
+    // MARK: tunnel log
+
+    private static let logLimit = 256 * 1024
+
+    static func resetLog() {
+        guard let url = logURL else { return }
+        try? Data().write(to: url, options: .atomic)
+    }
+
+    static func appendLog(_ text: String) {
+        guard let url = logURL, !text.isEmpty else { return }
+        let line = text.hasSuffix("\n") ? text : text + "\n"
+        guard let data = line.data(using: .utf8) else { return }
+        if let h = try? FileHandle(forWritingTo: url) {
+            h.seekToEndOfFile()
+            h.write(data)
+            let size = h.offsetInFile
+            h.closeFile()
+            if size > UInt64(logLimit) { trimLog(url) }
+        } else {
+            try? data.write(to: url, options: .atomic)
+        }
+    }
+
+    static func readLog() -> String? {
+        guard let url = logURL, let data = try? Data(contentsOf: url), !data.isEmpty else { return nil }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    private static func trimLog(_ url: URL) {
+        guard let data = try? Data(contentsOf: url) else { return }
+        let tail = data.suffix(logLimit / 2)
+        try? Data(tail).write(to: url, options: .atomic)
+    }
+
+    static func timestamp() -> String {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f.string(from: Date())
+    }
+}
+
+/// An openflux:// key as the core reads it. The link is never interpreted in
+/// Swift: the core decodes it and builds the session profile.
+struct KeyProfile {
+    var link: String
+    var name: String
+    var transports: [String]
+    var secret: String
+    var session: String
+    /// "stream" for a PHP exit, "" for the usual tunnel.
+    var mode: String
+    var streamType: String
+    var streamURL: String
+
+    struct Failure: Error {
+        let message: String
+    }
+
+    static func decode(_ link: String) -> Result<KeyProfile, Failure> {
+        let raw = link.withCString { a -> String? in
+            guard let r = OpenFluxShareDecode(UnsafeMutablePointer(mutating: a)) else { return nil }
+            defer { OpenFluxFreeString(r) }
+            return String(cString: r)
+        }
+        guard let text = raw,
+              let data = text.data(using: .utf8),
+              let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            return .failure(Failure(message: "Не удалось прочитать ключ"))
+        }
+        let code = json["code"] as? String
+        if code != nil || json["error"] != nil {
+            return .failure(Failure(message: describe(code: code ?? "", param: json["param"] as? String)))
+        }
+        guard let config = json["config"] as? [String: Any] else {
+            return .failure(Failure(message: "В ключе нет настроек"))
+        }
+        let list = (config["transports"] as? [[String: Any]]) ?? []
+        let names: [String] = list.compactMap { t in
+            let type = t["type"] as? String ?? ""
+            let name = t["name"] as? String ?? ""
+            let shown = name.isEmpty ? type : name
+            return shown.isEmpty ? nil : prettyTransport(shown)
+        }
+        var session = ""
+        if let s = json["session"] as? String {
+            session = s
+        } else if let obj = json["session"],
+                  let d = try? JSONSerialization.data(withJSONObject: obj),
+                  let s = String(data: d, encoding: .utf8) {
+            session = s
+        }
+        let mode = config["mode"] as? String ?? ""
+        let first = list.first ?? [:]
+        let profile = KeyProfile(
+            link: link,
+            name: (config["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Мой сервер",
+            transports: names,
+            secret: config["secret"] as? String ?? "",
+            session: session,
+            mode: mode,
+            streamType: first["type"] as? String ?? "",
+            streamURL: first["url"] as? String ?? ""
+        )
+        if mode != "stream" && session.isEmpty {
+            return .failure(Failure(message: "В ключе нет профиля подключения"))
+        }
+        return .success(profile)
+    }
+
+    /// Words the core's share.Code* for the user.
+    static func describe(code: String, param: String?) -> String {
+        switch code {
+        case "not_link": return "Это не ключ OpenFlux"
+        case "unsupported_version": return "Ключ от более новой версии OpenFlux"
+        case "case_changed": return "Ключ испорчен: изменился регистр букв (часто так делают мессенджеры)"
+        case "damaged": return "Ключ повреждён или обрезан при копировании"
+        case "too_large": return "Ключ слишком длинный"
+        case "bad_payload", "bad_config": return "Ключ повреждён"
+        case "no_transports": return "В ключе нет ни одного канала"
+        case "unknown_transport": return "Неизвестный канал в ключе\(param.map { ": \($0)" } ?? "")"
+        case "session_secret", "short_secret": return "В ключе слишком короткий секрет"
+        case "unknown_codec": return "Неизвестный кодек в ключе"
+        case "unknown_mode": return "Неизвестный режим в ключе"
+        default: return "Ключ не подходит\(code.isEmpty ? "" : " (\(code))")"
+        }
+    }
+
+    static func prettyTransport(_ t: String) -> String {
+        switch t.lowercased() {
+        case "yandex": return "Яндекс Документы"
+        case "boards": return "Доски"
+        case "mailru": return "Mail.ru"
+        case "direct": return "Напрямую"
+        default: return t
+        }
+    }
+}
