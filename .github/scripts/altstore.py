@@ -16,14 +16,14 @@ size = os.path.getsize(ipa)
 url = f"https://github.com/{REPO}/releases/download/ios-{build}/{name}"
 icon = f"https://raw.githubusercontent.com/{REPO}/main/ios/App/Assets.xcassets/AppIcon.appiconset/icon-1024.png"
 date = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-about = "VPN-клиент OpenFlux: вставьте ключ openflux:// и нажмите кнопку."
+about = "VPN-клиент: вставьте ключ hiseng:// и нажмите кнопку."
 notes = f"Сборка {build}"
 
 app = {
     "name": "Hiseng VPN",
     "bundleIdentifier": "com.hiseng.vpn",
     "developerName": "Hiseng",
-    "subtitle": "VPN на OpenFlux",
+    "subtitle": "Простой VPN",
     "localizedDescription": about,
     "iconURL": icon,
     "tintColor": "#6750A4",
