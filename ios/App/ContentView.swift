@@ -1,142 +1,139 @@
 import SwiftUI
 import UIKit
 
-// MARK: - Palette
-
-enum Palette {
-    static let bg = Color(red: 0.035, green: 0.035, blue: 0.06)
-    static let indigo = Color(red: 0.45, green: 0.40, blue: 1.0)
-    static let violet = Color(red: 0.66, green: 0.36, blue: 1.0)
-    static let mint = Color(red: 0.12, green: 0.86, blue: 0.62)
-    static let teal = Color(red: 0.0, green: 0.62, blue: 0.86)
-    static let amber = Color(red: 1.0, green: 0.70, blue: 0.20)
-    static let coral = Color(red: 1.0, green: 0.36, blue: 0.40)
-    static let text2 = Color.white.opacity(0.62)
-    static let text3 = Color.white.opacity(0.38)
-    static let card = Color.white.opacity(0.06)
-    static let stroke = Color.white.opacity(0.09)
-
-    static func main(_ s: VPNState) -> Color {
-        switch s {
-        case .off: return indigo
-        case .connecting, .reconnecting, .disconnecting: return amber
-        case .on: return mint
-        case .error: return coral
-        }
-    }
-
-    static func second(_ s: VPNState) -> Color {
-        switch s {
-        case .off: return violet
-        case .connecting, .reconnecting, .disconnecting: return coral
-        case .on: return teal
-        case .error: return violet
-        }
-    }
-}
-
-// MARK: - Screen
-
 struct ContentView: View {
     @EnvironmentObject var vpn: VPNController
     @State private var showEnter = false
     @State private var showLog = false
+    @State private var confirmDelete = false
 
     var body: some View {
-        ZStack(alignment: .top) {
-            AuroraBackground(a: Palette.main(vpn.state), b: Palette.second(vpn.state))
-                .animation(.easeInOut(duration: 0.8), value: vpn.state)
+        ZStack(alignment: .bottom) {
+            M3.surface.ignoresSafeArea()
 
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {
-                    header
-                        .padding(.top, 8)
+                    topBar
 
-                    PowerOrb(state: vpn.state) { vpn.toggle() }
-                        .frame(width: 250, height: 250)
-                        .padding(.top, 34)
+                    HeroButton(state: vpn.state) { vpn.toggle() }
+                        .frame(width: 300, height: 300)
+                        .padding(.top, 12)
 
-                    status
-                        .padding(.top, 26)
+                    statusBlock
+                        .padding(.top, 12)
 
                     if vpn.state == .on {
-                        StatsRow(rx: vpn.rx, tx: vpn.tx, transport: vpn.transport)
-                            .padding(.top, 26)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                        ConnectedGroup(rx: vpn.rx, tx: vpn.tx, transport: vpn.transport)
+                            .padding(.top, 28)
+                            .transition(.asymmetric(
+                                insertion: .scale(scale: 0.92, anchor: .top).combined(with: .opacity),
+                                removal: .opacity))
                     }
 
                     if vpn.state == .error, let err = vpn.errorText {
                         ErrorCard(text: err) { showLog = true }
-                            .padding(.top, 22)
-                            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                            .padding(.top, 28)
+                            .transition(.scale(scale: 0.94, anchor: .top).combined(with: .opacity))
                     }
 
-                    KeyCard(showEnter: $showEnter)
-                        .padding(.top, 22)
+                    keySection
+                        .padding(.top, 32)
 
-                    Text("Работает на OpenFlux · GPL-3.0")
-                        .font(.caption2)
-                        .foregroundColor(Palette.text3)
-                        .padding(.top, 22)
-                        .padding(.bottom, 30)
+                    Text("Hiseng VPN \(Self.version) · на основе OpenFlux")
+                        .font(.m3(.bodySmall))
+                        .foregroundColor(M3.onSurfaceVariant.opacity(0.7))
+                        .padding(.top, 28)
                 }
-                .padding(.horizontal, 18)
-                .animation(.spring(response: 0.5, dampingFraction: 0.85), value: vpn.state)
-                .animation(.spring(response: 0.5, dampingFraction: 0.85), value: vpn.errorText)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 100)
             }
 
             if let t = vpn.toast {
-                Toast(text: t)
-                    .padding(.top, 6)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                Snackbar(text: t)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(1)
+            }
+
+            if confirmDelete {
+                M3Dialog(icon: "trash", title: "Удалить ключ?",
+                         text: "VPN отключится. Чтобы подключиться снова, понадобится ключ openflux://.",
+                         confirm: "Удалить", destructive: true,
+                         onConfirm: { confirmDelete = false; vpn.deleteKey() },
+                         onDismiss: { confirmDelete = false })
+                    .transition(.opacity.combined(with: .scale(scale: 1.04)))
                     .zIndex(2)
             }
         }
-        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: vpn.toast)
-        .preferredColorScheme(.dark)
-        .sheet(isPresented: $showEnter) { EnterKeySheet().environmentObject(vpn) }
-        .sheet(isPresented: $showLog) { LogSheet().environmentObject(vpn) }
-    }
-
-    private var header: some View {
-        HStack(alignment: .center) {
-            HStack(spacing: 10) {
-                Logo()
-                    .frame(width: 34, height: 34)
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("Hiseng")
-                        .font(.system(size: 22, weight: .heavy, design: .rounded))
-                    Text("VPN")
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .kerning(3)
-                        .foregroundColor(Palette.text2)
-                }
-            }
-            Spacer()
-            CircleIconButton(system: "doc.text.magnifyingglass") { showLog = true }
+        .animation(M3Motion.spatial, value: vpn.state)
+        .animation(M3Motion.spatial, value: vpn.errorText)
+        .animation(M3Motion.spatial, value: vpn.toast)
+        .animation(M3Motion.effects, value: confirmDelete)
+        .sheet(isPresented: $showEnter) {
+            EnterKeySheet().environmentObject(vpn).m3Sheet(large: true)
         }
-        .foregroundColor(.white)
+        .sheet(isPresented: $showLog) {
+            LogSheet().environmentObject(vpn).m3Sheet()
+        }
     }
 
-    private var status: some View {
-        VStack(spacing: 8) {
+    static var version: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+    }
+
+    // MARK: top bar
+
+    private var topBar: some View {
+        HStack(spacing: 12) {
+            ShapeIcon(system: "shield.lefthalf.filled", shape: .cookie7,
+                      container: M3.primaryContainer, content: M3.onPrimaryContainer, size: 44)
+            Text("Hiseng VPN")
+                .font(.m3(.headlineSmall, emphasized: true))
+                .foregroundColor(M3.onSurface)
+            Spacer()
+            Button { showLog = true } label: {
+                Image(systemName: "doc.text.magnifyingglass")
+            }
+            .buttonStyle(M3IconButton())
+            .accessibilityLabel("Журнал")
+        }
+        .padding(.top, 8)
+    }
+
+    // MARK: status
+
+    private var statusBlock: some View {
+        VStack(spacing: 10) {
             Text(title)
-                .font(.system(size: 34, weight: .bold, design: .rounded))
-                .foregroundColor(.white)
+                .font(.m3(.displaySmall, emphasized: true))
+                .foregroundColor(titleColor)
                 .id(title)
-                .transition(.opacity)
+                .transition(.asymmetric(
+                    insertion: .offset(y: 12).combined(with: .opacity),
+                    removal: .offset(y: -12).combined(with: .opacity)))
 
             if vpn.state == .on, let since = vpn.connectedSince {
                 TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                    Text(Self.elapsed(from: since, to: ctx.date))
-                        .font(.system(size: 17, weight: .semibold, design: .rounded).monospacedDigit())
-                        .foregroundColor(Palette.mint)
+                    HStack(spacing: 6) {
+                        Image(systemName: "clock.fill")
+                            .font(.system(size: 13, weight: .bold))
+                        Text(Self.elapsed(from: since, to: ctx.date))
+                            .font(.m3(.labelLarge, emphasized: true).monospacedDigit())
+                    }
+                    .foregroundColor(M3.onTertiaryContainer)
+                    .padding(.horizontal, 14)
+                    .frame(height: 32)
+                    .background(Capsule().fill(M3.tertiaryContainer))
                 }
+                .transition(.scale.combined(with: .opacity))
             } else {
                 Text(subtitle)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(Palette.text2)
+                    .font(.m3(.bodyLarge))
+                    .foregroundColor(M3.onSurfaceVariant)
                     .multilineTextAlignment(.center)
+                    .id(subtitle)
+                    .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity)
@@ -148,15 +145,22 @@ struct ContentView: View {
         case .connecting: return "Подключение"
         case .reconnecting: return "Переподключение"
         case .disconnecting: return "Отключение"
-        case .on: return "Защищено"
+        case .on: return "Подключено"
         case .error: return "Ошибка"
+        }
+    }
+
+    private var titleColor: Color {
+        switch vpn.state {
+        case .on: return M3.tertiary
+        case .error: return M3.error
+        default: return M3.onSurface
         }
     }
 
     private var subtitle: String {
         switch vpn.state {
-        case .off: return vpn.key == nil ? "Добавьте ключ, чтобы начать" : "Нажмите, чтобы подключиться"
-        case .error: return vpn.message
+        case .off: return vpn.key == nil ? "Добавьте ключ ниже" : "Нажмите, чтобы подключиться"
         default: return vpn.message
         }
     }
@@ -166,165 +170,229 @@ struct ContentView: View {
         let h = s / 3600, m = (s % 3600) / 60, sec = s % 60
         return h > 0 ? String(format: "%d:%02d:%02d", h, m, sec) : String(format: "%02d:%02d", m, sec)
     }
-}
 
-// MARK: - Background
+    // MARK: key
 
-struct AuroraBackground: View {
-    var a: Color
-    var b: Color
-    @State private var drift = false
+    private var keySection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Ключ доступа")
+                .font(.m3(.labelLarge, emphasized: true))
+                .foregroundColor(M3.primary)
+                .padding(.leading, 16)
+                .padding(.bottom, 10)
 
-    var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            ZStack {
-                Palette.bg
-                Circle()
-                    .fill(a.opacity(0.55))
-                    .frame(width: w * 1.1, height: w * 1.1)
-                    .blur(radius: 90)
-                    .offset(x: drift ? -w * 0.25 : w * 0.15, y: drift ? -w * 0.55 : -w * 0.35)
-                Circle()
-                    .fill(b.opacity(0.40))
-                    .frame(width: w * 0.9, height: w * 0.9)
-                    .blur(radius: 100)
-                    .offset(x: drift ? w * 0.35 : -w * 0.05, y: drift ? w * 0.05 : -w * 0.15)
-                Circle()
-                    .fill(a.opacity(0.18))
-                    .frame(width: w, height: w)
-                    .blur(radius: 120)
-                    .offset(x: drift ? -w * 0.1 : w * 0.2, y: drift ? w * 0.9 : w * 0.7)
-                LinearGradient(colors: [.clear, Palette.bg.opacity(0.85)],
-                               startPoint: .center, endPoint: .bottom)
+            let channels = vpn.profile?.transports ?? []
+            VStack(spacing: 3) {
+                keyItem
+                    .segment(channels.isEmpty ? .single : .top)
+                if !channels.isEmpty {
+                    ChannelsItem(items: channels)
+                        .segment(.bottom)
+                }
             }
-            .frame(width: geo.size.width, height: geo.size.height)
+
+            VStack(spacing: 10) {
+                Button { vpn.pasteKey() } label: {
+                    Label("Вставить ключ из буфера", systemImage: "doc.on.clipboard.fill")
+                }
+                .buttonStyle(M3Button(.filled, height: 60))
+
+                Button { showEnter = true } label: {
+                    Label("Ввести вручную", systemImage: "keyboard")
+                }
+                .buttonStyle(M3Button(.tonal, height: 52))
+            }
+            .padding(.top, 14)
         }
-        .ignoresSafeArea()
-        .onAppear {
-            withAnimation(.easeInOut(duration: 9).repeatForever(autoreverses: true)) { drift = true }
+    }
+
+    private var keyItem: some View {
+        let has = vpn.profile != nil
+        return HStack(spacing: 16) {
+            ShapeIcon(system: has ? "checkmark" : "key.fill", shape: .cookie6,
+                      container: has ? M3.tertiaryContainer : M3.secondaryContainer,
+                      content: has ? M3.onTertiaryContainer : M3.onSecondaryContainer,
+                      size: 52)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(vpn.profile?.name ?? "Ключ не добавлен")
+                    .font(.m3(.titleMedium))
+                    .foregroundColor(M3.onSurface)
+                    .lineLimit(1)
+                Text(keyDetail)
+                    .font(.m3(.bodyMedium))
+                    .foregroundColor(M3.onSurfaceVariant)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+            if has {
+                Menu {
+                    Button { showEnter = true } label: { Label("Заменить ключ", systemImage: "pencil") }
+                    Button {
+                        UIPasteboard.general.string = vpn.key
+                        vpn.show("Ключ скопирован")
+                    } label: { Label("Скопировать ключ", systemImage: "doc.on.doc") }
+                    Button(role: .destructive) { confirmDelete = true } label: {
+                        Label("Удалить ключ", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(M3.onSurfaceVariant)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+            }
         }
+        .padding(16)
+    }
+
+    private var keyDetail: String {
+        guard let p = vpn.profile else { return "Скопируйте ключ openflux:// и вставьте" }
+        if p.mode == "stream" { return "PHP-узел" }
+        let n = p.transports.count
+        let word = n % 10 == 1 && n % 100 != 11 ? "канал"
+            : (2...4).contains(n % 10) && !(12...14).contains(n % 100) ? "канала" : "каналов"
+        return "\(n) \(word) связи"
     }
 }
 
-// MARK: - Power orb
+// MARK: - Hero power button
 
-struct PowerOrb: View {
+/// Keeps the hero turning and eases its speed between states, so stopping or
+/// speeding up never jumps.
+private final class Spinner {
+    private(set) var angle = 0.0
+    private var speed = 0.0
+    private var last: TimeInterval?
+
+    func advance(to t: TimeInterval, target: Double) -> Double {
+        let dt = last.map { min(0.1, max(0, t - $0)) } ?? 0
+        last = t
+        speed += (target - speed) * min(1, dt * 2.5)
+        angle = (angle + speed * dt).truncatingRemainder(dividingBy: 360)
+        return angle
+    }
+}
+
+struct HeroButton: View {
     var state: VPNState
     var action: () -> Void
-
-    @State private var spin = false
-    @State private var breathe = false
-    @State private var ripple = false
+    @State private var spinner = Spinner()
 
     private var busy: Bool {
         state == .connecting || state == .reconnecting || state == .disconnecting
     }
 
+    private var shape: MShape {
+        switch state {
+        case .off: return .cookie9
+        case .connecting, .reconnecting, .disconnecting: return .softBurst
+        case .on: return .cookie12
+        case .error: return .cookie4
+        }
+    }
+
+    private var backdrop: MShape {
+        switch state {
+        case .off: return .sunny
+        case .connecting, .reconnecting, .disconnecting: return .verySunny
+        case .on: return .flower
+        case .error: return .clover4
+        }
+    }
+
+    private var container: Color {
+        switch state {
+        case .off: return M3.surfaceContainerHighest
+        case .connecting, .reconnecting, .disconnecting: return M3.primaryContainer
+        case .on: return M3.tertiaryContainer
+        case .error: return M3.errorContainer
+        }
+    }
+
+    private var content: Color {
+        switch state {
+        case .off: return M3.primary
+        case .connecting, .reconnecting, .disconnecting: return M3.onPrimaryContainer
+        case .on: return M3.onTertiaryContainer
+        case .error: return M3.onErrorContainer
+        }
+    }
+
+    /// Degrees per second.
+    private var speed: Double {
+        switch state {
+        case .off, .error: return 0
+        case .connecting, .reconnecting, .disconnecting: return 70
+        case .on: return 14
+        }
+    }
+
     var body: some View {
-        let c = Palette.main(state)
-        let c2 = Palette.second(state)
-        ZStack {
-            // Glow.
-            Circle()
-                .fill(c.opacity(state == .off ? 0.22 : 0.45))
-                .blur(radius: 46)
-                .scaleEffect(breathe ? 1.08 : 0.92)
+        TimelineView(.animation) { ctx in
+            let a = spinner.advance(to: ctx.date.timeIntervalSinceReferenceDate, target: speed)
+            ZStack {
+                MorphShape(backdrop)
+                    .fill(container.opacity(0.35))
+                    .rotationEffect(.degrees(-a * 0.6))
 
-            // Ripples while connecting.
-            ForEach(0..<3) { i in
-                Circle()
-                    .stroke(c.opacity(busy ? 0.5 : 0), lineWidth: 1.5)
-                    .scaleEffect(ripple ? 1.35 : 0.72)
-                    .opacity(ripple ? 0 : 1)
-                    .animation(.easeOut(duration: 2.4).repeatForever(autoreverses: false).delay(Double(i) * 0.8),
-                               value: ripple)
-            }
-
-            // Track.
-            Circle()
-                .stroke(Color.white.opacity(0.07), lineWidth: 10)
-                .padding(14)
-
-            // Progress / state ring.
-            Circle()
-                .trim(from: 0, to: busy ? 0.3 : 1)
-                .stroke(AngularGradient(colors: [c.opacity(0.1), c, c2, c], center: .center, startAngle: .degrees(0), endAngle: .degrees(360)),
-                        style: StrokeStyle(lineWidth: 10, lineCap: .round))
-                .rotationEffect(.degrees(spin ? 360 : 0))
-                .padding(14)
-                .opacity(state == .off ? 0.55 : 1)
-
-            // Disc.
-            Button(action: action) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            state == .off
-                                ? AnyShapeStyle(LinearGradient(colors: [Color.white.opacity(0.10), Color.white.opacity(0.03)],
-                                                               startPoint: .top, endPoint: .bottom))
-                                : AnyShapeStyle(LinearGradient(colors: [c, c2.opacity(0.85)],
-                                                               startPoint: .topLeading, endPoint: .bottomTrailing))
-                        )
-                    Circle()
-                        .stroke(LinearGradient(colors: [Color.white.opacity(0.35), Color.white.opacity(0.02)],
-                                               startPoint: .top, endPoint: .bottom), lineWidth: 1.2)
-                    Circle()
-                        .fill(RadialGradient(colors: [Color.white.opacity(0.28), .clear],
-                                             center: .init(x: 0.35, y: 0.25), startRadius: 2, endRadius: 90))
-                    Image(systemName: "power")
-                        .font(.system(size: 52, weight: .semibold))
-                        .foregroundColor(state == .off ? c : .white)
-                        .shadow(color: .black.opacity(0.25), radius: 6, y: 3)
+                Button(action: action) {
+                    ZStack {
+                        MorphShape(shape)
+                            .fill(container)
+                            .rotationEffect(.degrees(a))
+                        if busy {
+                            LoadingIndicator(color: content)
+                                .frame(width: 88, height: 88)
+                                .transition(.scale(scale: 0.4).combined(with: .opacity))
+                        } else {
+                            Image(systemName: "power")
+                                .font(.system(size: 72, weight: .semibold))
+                                .foregroundColor(content)
+                                .transition(.scale(scale: 0.4).combined(with: .opacity))
+                        }
+                    }
+                    .frame(width: 236, height: 236)
+                    .contentShape(Circle())
                 }
-                .padding(36)
-                .shadow(color: c.opacity(state == .off ? 0.15 : 0.55), radius: 26, y: 10)
+                .buttonStyle(BouncyPress())
+                .accessibilityLabel(state == .on ? "Отключить VPN" : "Подключить VPN")
             }
-            .buttonStyle(PressScale())
-            .accessibilityLabel(state == .on ? "Отключить VPN" : "Подключить VPN")
         }
-        .onAppear {
-            withAnimation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true)) { breathe = true }
-            withAnimation(.linear(duration: 1.3).repeatForever(autoreverses: false)) { spin = true }
-            ripple = true
-        }
-        .animation(.easeInOut(duration: 0.5), value: state)
+        .animation(M3Motion.spatialSlow, value: state)
     }
 }
 
-struct PressScale: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.93 : 1)
-            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
-    }
-}
+// MARK: - Connected
 
-// MARK: - Stats
-
-struct StatsRow: View {
+struct ConnectedGroup: View {
     var rx: UInt64
     var tx: UInt64
     var transport: String
 
     var body: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 10) {
-                StatTile(icon: "arrow.down", title: "Получено", value: Self.bytes(rx), tint: Palette.mint)
-                StatTile(icon: "arrow.up", title: "Отправлено", value: Self.bytes(tx), tint: Palette.teal)
+        VStack(spacing: 3) {
+            HStack(spacing: 3) {
+                StatTile(icon: "arrow.down", label: "Получено", value: Self.bytes(rx), shape: .cookie4)
+                    .segment(.topLeft)
+                StatTile(icon: "arrow.up", label: "Отправлено", value: Self.bytes(tx), shape: .clover4)
+                    .segment(.topRight)
             }
-            if !transport.isEmpty {
-                HStack(spacing: 6) {
-                    Image(systemName: "antenna.radiowaves.left.and.right")
-                    Text("Канал: \(transport)")
+            HStack(spacing: 14) {
+                ShapeIcon(system: "antenna.radiowaves.left.and.right", shape: .sunny,
+                          container: M3.secondaryContainer, content: M3.onSecondaryContainer, size: 40)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Канал связи")
+                        .font(.m3(.bodySmall))
+                        .foregroundColor(M3.onSurfaceVariant)
+                    Text(transport.isEmpty ? "Определяется…" : transport)
+                        .font(.m3(.titleMedium))
+                        .foregroundColor(M3.onSurface)
                 }
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(Palette.text2)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(Capsule().fill(Palette.card))
-                .overlay(Capsule().stroke(Palette.stroke))
+                Spacer(minLength: 0)
             }
+            .padding(16)
+            .segment(.bottom)
         }
     }
 
@@ -338,31 +406,54 @@ struct StatsRow: View {
 
 struct StatTile: View {
     var icon: String
-    var title: String
+    var label: String
     var value: String
-    var tint: Color
+    var shape: MShape
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundColor(tint)
-                .frame(width: 34, height: 34)
-                .background(Circle().fill(tint.opacity(0.16)))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(Palette.text3)
+        VStack(alignment: .leading, spacing: 12) {
+            ShapeIcon(system: icon, shape: shape, container: M3.tertiaryContainer,
+                      content: M3.onTertiaryContainer, size: 40)
+            VStack(alignment: .leading, spacing: 1) {
                 Text(value)
-                    .font(.system(size: 17, weight: .bold, design: .rounded).monospacedDigit())
-                    .foregroundColor(.white)
+                    .font(.m3(.titleLarge, emphasized: true).monospacedDigit())
+                    .foregroundColor(M3.onSurface)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
+                Text(label)
+                    .font(.m3(.bodySmall))
+                    .foregroundColor(M3.onSurfaceVariant)
             }
-            Spacer(minLength: 0)
         }
-        .padding(14)
-        .glass(radius: 22)
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct ChannelsItem: View {
+    var items: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Каналы")
+                .font(.m3(.labelMedium))
+                .foregroundColor(M3.onSurfaceVariant)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(items.enumerated()), id: \.offset) { _, t in
+                        Text(t)
+                            .font(.m3(.labelLarge))
+                            .foregroundColor(M3.onSurfaceVariant)
+                            .padding(.horizontal, 14)
+                            .frame(height: 32)
+                            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(M3.outlineVariant, lineWidth: 1))
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -373,140 +464,27 @@ struct ErrorCard: View {
     var openLog: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(Palette.coral)
-                Text("Что пошло не так")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 14) {
+                ShapeIcon(system: "exclamationmark", shape: .cookie4,
+                          container: M3.error, content: M3.onError, size: 44)
+                Text("Не удалось подключиться")
+                    .font(.m3(.titleMedium, emphasized: true))
+                    .foregroundColor(M3.onErrorContainer)
             }
             Text(text)
-                .font(.system(size: 14))
-                .foregroundColor(Palette.text2)
+                .font(.m3(.bodyMedium))
+                .foregroundColor(M3.onErrorContainer)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
             Button(action: openLog) {
-                HStack(spacing: 6) {
-                    Image(systemName: "doc.text")
-                    Text("Открыть журнал")
-                }
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(Palette.coral)
+                Label("Открыть журнал", systemImage: "doc.text")
             }
+            .buttonStyle(M3Button(.error, height: 44, fill: false))
         }
-        .padding(18)
+        .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Palette.coral.opacity(0.10)))
-        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Palette.coral.opacity(0.35)))
-    }
-}
-
-// MARK: - Key
-
-struct KeyCard: View {
-    @EnvironmentObject var vpn: VPNController
-    @Binding var showEnter: Bool
-    @State private var confirmDelete = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(LinearGradient(colors: vpn.profile == nil
-                                             ? [Color.white.opacity(0.10), Color.white.opacity(0.04)]
-                                             : [Palette.indigo, Palette.violet],
-                                             startPoint: .topLeading, endPoint: .bottomTrailing))
-                    Image(systemName: vpn.profile == nil ? "key" : "key.fill")
-                        .font(.system(size: 19, weight: .semibold))
-                        .foregroundColor(.white)
-                }
-                .frame(width: 48, height: 48)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(vpn.profile?.name ?? "Ключ не добавлен")
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                    Text(detail)
-                        .font(.system(size: 13))
-                        .foregroundColor(Palette.text3)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                Spacer(minLength: 0)
-                if vpn.profile != nil {
-                    Menu {
-                        Button { showEnter = true } label: { Label("Заменить ключ", systemImage: "pencil") }
-                        Button {
-                            UIPasteboard.general.string = vpn.key
-                            vpn.show("Ключ скопирован")
-                        } label: { Label("Скопировать ключ", systemImage: "doc.on.doc") }
-                        Button(role: .destructive) { confirmDelete = true } label: {
-                            Label("Удалить ключ", systemImage: "trash")
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(Palette.text2)
-                            .frame(width: 36, height: 36)
-                            .background(Circle().fill(Palette.card))
-                    }
-                }
-            }
-
-            if let p = vpn.profile, !p.transports.isEmpty {
-                FlowChips(items: p.transports)
-            }
-
-            HStack(spacing: 10) {
-                Button { vpn.pasteKey() } label: {
-                    Label("Вставить", systemImage: "doc.on.clipboard")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(FilledButton(tint: Palette.indigo))
-
-                Button { showEnter = true } label: {
-                    Label("Ввести", systemImage: "keyboard")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(TonalButton())
-            }
-        }
-        .padding(18)
-        .glass(radius: 28)
-        .alert("Удалить ключ?", isPresented: $confirmDelete) {
-            Button("Удалить", role: .destructive) { vpn.deleteKey() }
-            Button("Отмена", role: .cancel) {}
-        }
-    }
-
-    private var detail: String {
-        guard let p = vpn.profile else { return "Вставьте ключ openflux:// из буфера" }
-        if p.mode == "stream" { return "Режим PHP-узла" }
-        let n = p.transports.count
-        return n == 1 ? "1 канал" : (n >= 2 && n <= 4 ? "\(n) канала" : "\(n) каналов")
-    }
-}
-
-struct FlowChips: View {
-    var items: [String]
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(Array(items.enumerated()), id: \.offset) { _, t in
-                    Text(t)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(Palette.text2)
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 6)
-                        .background(Capsule().fill(Palette.card))
-                        .overlay(Capsule().stroke(Palette.stroke))
-                }
-            }
-        }
+        .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(M3.errorContainer))
     }
 }
 
@@ -516,183 +494,110 @@ struct EnterKeySheet: View {
     @EnvironmentObject var vpn: VPNController
     @Environment(\.dismiss) private var dismiss
     @State private var text = ""
+    @FocusState private var focused: Bool
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                Palette.bg.ignoresSafeArea()
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("Вставьте ключ, который выдал сервер. Он начинается с openflux://")
-                        .font(.system(size: 14))
-                        .foregroundColor(Palette.text2)
-                    ZStack(alignment: .topLeading) {
-                        if text.isEmpty {
-                            Text("openflux://v1/…")
-                                .foregroundColor(Palette.text3)
-                                .padding(.horizontal, 18)
-                                .padding(.vertical, 20)
-                        }
-                        TextEditor(text: $text)
-                            .font(.system(size: 14, design: .monospaced))
-                            .foregroundColor(.white)
-                            .autocapitalization(.none)
-                            .disableAutocorrection(true)
-                            .padding(12)
-                    }
-                    .frame(minHeight: 160)
-                    .glass(radius: 20)
+        VStack(alignment: .leading, spacing: 0) {
+            DragHandle()
+            Text("Новый ключ")
+                .font(.m3(.headlineSmall))
+                .foregroundColor(M3.onSurface)
+            Text("Вставьте ключ openflux://, который выдал сервер")
+                .font(.m3(.bodyMedium))
+                .foregroundColor(M3.onSurfaceVariant)
+                .padding(.top, 6)
 
-                    Button {
-                        if vpn.saveKey(text) { dismiss() }
-                    } label: {
-                        Text("Сохранить ключ").frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(FilledButton(tint: Palette.indigo))
-                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    Spacer()
-                }
-                .padding(18)
+            ZStack(alignment: .topLeading) {
+                TextEditor(text: $text)
+                    .font(.system(size: 14, design: .monospaced))
+                    .foregroundColor(M3.onSurface)
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
+                    .focused($focused)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 14)
+                    .frame(height: 150)
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(focused ? M3.primary : M3.outline, lineWidth: focused ? 2 : 1))
+                Text("Ключ")
+                    .font(.m3(.bodySmall))
+                    .foregroundColor(focused ? M3.primary : M3.onSurfaceVariant)
+                    .padding(.horizontal, 4)
+                    .background(M3.surfaceContainerLow)
+                    .offset(x: 12, y: -8)
             }
-            .navigationTitle("Новый ключ")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Отмена") { dismiss() }
-                }
+            .padding(.top, 22)
+            .animation(M3Motion.effects, value: focused)
+
+            Button {
+                text = UIPasteboard.general.string ?? text
+            } label: {
+                Label("Из буфера обмена", systemImage: "doc.on.clipboard")
             }
+            .buttonStyle(M3Button(.outlined, height: 40, fill: false))
+            .padding(.top, 12)
+
+            HStack(spacing: 8) {
+                Button("Отмена") { dismiss() }
+                    .buttonStyle(M3Button(.text, height: 48, fill: false))
+                Spacer()
+                Button("Сохранить") {
+                    if vpn.saveKey(text) { dismiss() }
+                }
+                .buttonStyle(M3Button(.filled, height: 48, fill: false))
+                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(.top, 24)
+            Spacer()
         }
-        .preferredColorScheme(.dark)
+        .padding(.horizontal, 24)
+        .background(M3.surfaceContainerLow.ignoresSafeArea())
+        .onAppear {
+            text = vpn.key ?? ""
+            focused = true
+        }
     }
 }
 
 struct LogSheet: View {
     @EnvironmentObject var vpn: VPNController
-    @Environment(\.dismiss) private var dismiss
     @State private var log = ""
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                Palette.bg.ignoresSafeArea()
-                ScrollView {
-                    Text(log.isEmpty ? "Загрузка…" : log)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(Palette.text2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
-                        .padding(16)
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            DragHandle()
+            HStack {
+                Text("Журнал")
+                    .font(.m3(.headlineSmall))
+                    .foregroundColor(M3.onSurface)
+                Spacer()
+                Button { reload() } label: { Image(systemName: "arrow.clockwise") }
+                    .buttonStyle(M3IconButton(tonal: false, size: 44))
+                Button {
+                    UIPasteboard.general.string = log
+                    vpn.show("Журнал скопирован")
+                } label: { Image(systemName: "doc.on.doc") }
+                    .buttonStyle(M3IconButton(size: 44))
             }
-            .navigationTitle("Журнал")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Закрыть") { dismiss() }
-                }
-                ToolbarItemGroup(placement: .primaryAction) {
-                    Button { reload() } label: { Image(systemName: "arrow.clockwise") }
-                    Button {
-                        UIPasteboard.general.string = log
-                        vpn.show("Журнал скопирован")
-                    } label: { Image(systemName: "doc.on.doc") }
-                }
+            ScrollView {
+                Text(log.isEmpty ? "Загрузка…" : log)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(M3.onSurfaceVariant)
+                    .lineSpacing(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+                    .padding(16)
             }
+            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(M3.surfaceContainerHighest))
+            .padding(.top, 14)
+            .padding(.bottom, 16)
         }
-        .preferredColorScheme(.dark)
+        .padding(.horizontal, 20)
+        .background(M3.surfaceContainerLow.ignoresSafeArea())
         .onAppear { reload() }
     }
 
     private func reload() {
         vpn.fetchLog { text in log = text }
-    }
-}
-
-// MARK: - Small pieces
-
-struct Logo: View {
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(LinearGradient(colors: [Palette.indigo, Palette.violet],
-                                     startPoint: .topLeading, endPoint: .bottomTrailing))
-            Image(systemName: "bolt.shield.fill")
-                .font(.system(size: 17, weight: .bold))
-                .foregroundColor(.white)
-        }
-        .shadow(color: Palette.indigo.opacity(0.5), radius: 10, y: 4)
-    }
-}
-
-struct CircleIconButton: View {
-    var system: String
-    var action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: system)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(.white)
-                .frame(width: 42, height: 42)
-                .background(Circle().fill(Palette.card))
-                .overlay(Circle().stroke(Palette.stroke))
-        }
-        .buttonStyle(PressScale())
-    }
-}
-
-struct Toast: View {
-    var text: String
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundColor(.white)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 12)
-            .background(Capsule().fill(.ultraThinMaterial))
-            .overlay(Capsule().stroke(Palette.stroke))
-            .shadow(color: .black.opacity(0.3), radius: 14, y: 6)
-            .padding(.horizontal, 24)
-    }
-}
-
-struct FilledButton: ButtonStyle {
-    var tint: Color
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 15, weight: .bold, design: .rounded))
-            .foregroundColor(.white)
-            .padding(.vertical, 15)
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(LinearGradient(colors: [tint, Palette.violet], startPoint: .leading, endPoint: .trailing))
-            )
-            .shadow(color: tint.opacity(0.4), radius: 12, y: 5)
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .opacity(configuration.isPressed ? 0.9 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
-    }
-}
-
-struct TonalButton: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 15, weight: .bold, design: .rounded))
-            .foregroundColor(.white)
-            .padding(.vertical, 15)
-            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white.opacity(0.09)))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Palette.stroke))
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
-    }
-}
-
-extension View {
-    func glass(radius: CGFloat) -> some View {
-        self
-            .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(.ultraThinMaterial))
-            .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(Palette.card))
-            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).stroke(Palette.stroke))
     }
 }
