@@ -1,0 +1,35 @@
+name: Core memory check
+
+on:
+  workflow_dispatch:
+
+jobs:
+  memcheck:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: openflux/mobile/go.mod
+          cache-dependency-path: openflux/mobile/go.sum
+
+      - name: Build core for macOS (same code as iOS)
+        run: |
+          cd openflux/mobile
+          CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -buildmode=c-archive -tags ios \
+            -ldflags="-w" -trimpath -o ../../tools/memcheck/liboflux.a ./ios
+
+      - name: Measure
+        run: |
+          cd tools/memcheck
+          clang -O2 -o memcheck main.c liboflux.a -lresolv -framework CoreFoundation -framework Security
+          ./memcheck
+          echo "--- segments of the linked binary"
+          size -m memcheck | grep -E "Segment|Section __(data|bss|noptrdata|noptrbss|go_buildinfo|got)|total" | head -40
+
+      - name: Baseline without Go
+        run: |
+          cd tools/memcheck
+          printf '#include <stdio.h>\n#include <mach/mach.h>\nint main(void){task_vm_info_data_t i;mach_msg_type_number_t c=TASK_VM_INFO_COUNT;task_info(mach_task_self(),TASK_VM_INFO,(task_info_t)&i,&c);printf("plain C: %%.1f MB\\n",i.phys_footprint/1048576.0);return 0;}\n' > base.c
+          clang -o base base.c && ./base
