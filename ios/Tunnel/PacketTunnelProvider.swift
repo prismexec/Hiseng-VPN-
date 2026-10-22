@@ -23,10 +23,18 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     // MARK: start / stop
 
+    /// The earliest point Swift runs in this process (the Go core has
+    /// already loaded): proves the process started and how much memory the
+    /// core took, and moves out the core's report of a previous crash.
+    override init() {
+        super.init()
+        note("Процесс туннеля запущен, \(Shared.memoryLine())")
+        drainCoreLog()
+    }
+
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
-        Shared.resetLog()
         Shared.writeError(nil)
-        note("Запуск туннеля, iOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
+        note("Запуск туннеля, iOS \(ProcessInfo.processInfo.operatingSystemVersionString), \(Shared.memoryLine())")
         let sign = Signing.current
         note("Подпись туннеля: право на VPN — \(sign?.hasPacketTunnel == true ? "есть" : "НЕТ"), группа \(Shared.groupID) — \(Shared.groupAvailable ? "доступна" : "недоступна")")
 
@@ -78,7 +86,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 self.running = true
                 self.startedAt = Date()
                 self.lock.unlock()
-                self.note("Ядро запущено")
+                self.note("Ядро запущено, \(Shared.memoryLine())")
                 self.startReadLoop()
                 self.startWriteLoop()
                 self.startMonitor()
@@ -206,7 +214,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             if on { self.connectedOnce = true }
             let seen = self.connectedOnce
             self.lock.unlock()
-            if first { self.note("Канал до сервера установлен") }
+            if first { self.note("Канал до сервера установлен, \(Shared.memoryLine())") }
             if seen && self.reasserting == on {
                 self.reasserting = !on
                 self.note(on ? "Связь восстановлена" : "Связь потеряна, переподключаемся…")

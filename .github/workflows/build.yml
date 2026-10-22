@@ -55,6 +55,7 @@ jobs:
           path: HisengVPN-*.apk
 
       - name: Release
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}

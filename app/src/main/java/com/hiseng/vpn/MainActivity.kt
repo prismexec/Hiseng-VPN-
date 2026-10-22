@@ -58,6 +58,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MaterialShapes
@@ -74,6 +75,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -208,6 +210,14 @@ fun MainScreen() {
     var keyVersion by remember { mutableIntStateOf(0) }
     var showLogs by remember { mutableStateOf(false) }
     var showDialog by remember { mutableStateOf(false) }
+    var update by remember { mutableStateOf(Updater.state) }
+
+    DisposableEffect(Unit) {
+        val l: () -> Unit = { update = Updater.state }
+        Updater.listen(l)
+        onDispose { Updater.unlisten(l) }
+    }
+    LaunchedEffect(Unit) { Updater.check(ctx) }
 
     DisposableEffect(Unit) {
         val l: () -> Unit = {
@@ -304,6 +314,26 @@ fun MainScreen() {
                     else if (KeyStore.save(ctx, text)) keyVersion++
                 },
                 onEnter = { showDialog = true }
+            )
+
+            AnimatedVisibility(
+                visible = Updater.release != null && update !is Updater.State.Idle && update !is Updater.State.Checking,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                UpdateCard(
+                    state = update,
+                    build = Updater.release?.build ?: 0,
+                    onDownload = { Updater.download(ctx) },
+                    onInstall = { Updater.install(ctx) }
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+            AboutCard(
+                version = Updater.versionName(ctx),
+                checking = update is Updater.State.Checking,
+                onCheck = { Updater.check(ctx) { toast(ctx, it) } }
             )
 
             Spacer(Modifier.height(12.dp))
@@ -506,6 +536,114 @@ fun KeyCard(title: Pair<String, String>?, onPaste: () -> Unit, onEnter: () -> Un
                     .heightIn(min = 52.dp)
             ) {
                 Text("Ввести вручную")
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun UpdateCard(state: Updater.State, build: Int, onDownload: () -> Unit, onInstall: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        shape = RoundedCornerShape(32.dp),
+        color = scheme.primaryContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp)
+    ) {
+        Column(Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(MaterialShapes.Sunny.toShape())
+                        .background(scheme.primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("↓", color = scheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                }
+                Spacer(Modifier.size(14.dp))
+                Column {
+                    Text(
+                        "Доступно обновление",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = scheme.onPrimaryContainer
+                    )
+                    Text(
+                        "Сборка $build",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = scheme.onPrimaryContainer
+                    )
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            when (state) {
+                is Updater.State.Downloading -> {
+                    LinearWavyProgressIndicator(
+                        progress = { state.progress },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Скачивание… ${(state.progress * 100).toInt()}%",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = scheme.onPrimaryContainer
+                    )
+                }
+                is Updater.State.Ready -> Button(
+                    onClick = onInstall,
+                    shapes = ButtonDefaults.shapes(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 56.dp)
+                ) { Text("Установить", style = MaterialTheme.typography.titleMedium) }
+                else -> {
+                    if (state is Updater.State.Failed) {
+                        Text(state.message, style = MaterialTheme.typography.bodyMedium, color = scheme.error)
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    Button(
+                        onClick = onDownload,
+                        shapes = ButtonDefaults.shapes(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp)
+                    ) { Text("Скачать и установить", style = MaterialTheme.typography.titleMedium) }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun AboutCard(version: String, checking: Boolean, onCheck: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        shape = RoundedCornerShape(32.dp),
+        color = scheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(MaterialShapes.Cookie7Sided.toShape())
+                    .background(scheme.secondaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("i", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = scheme.onSecondaryContainer)
+            }
+            Spacer(Modifier.size(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Версия", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(version, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
+            }
+            FilledTonalButton(onClick = onCheck, enabled = !checking, shapes = ButtonDefaults.shapes()) {
+                if (checking) LoadingIndicator(modifier = Modifier.size(20.dp))
+                else Text("Проверить")
             }
         }
     }

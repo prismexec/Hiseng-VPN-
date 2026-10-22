@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Code shared by the app and the tunnel extension: the key decoder and the
 /// files both sides read through the app group (last error, tunnel log).
@@ -78,6 +79,25 @@ enum Shared {
         guard let data = try? Data(contentsOf: url) else { return }
         let tail = data.suffix(logLimit / 2)
         try? Data(tail).write(to: url, options: .atomic)
+    }
+
+    /// Memory this process uses as iOS counts it for its limit, in MB.
+    static func footprintMB() -> Double {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<integer_t>.size)
+        let kr = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+            }
+        }
+        return kr == KERN_SUCCESS ? Double(info.phys_footprint) / 1_048_576 : -1
+    }
+
+    /// "used 31.2 MB, 18.8 MB left before iOS ends the process".
+    static func memoryLine() -> String {
+        let used = String(format: "%.1f", footprintMB())
+        let left = String(format: "%.1f", Double(os_proc_available_memory()) / 1_048_576)
+        return "память \(used) МБ, до лимита iOS \(left) МБ"
     }
 
     static func timestamp() -> String {
@@ -207,6 +227,22 @@ struct Signing {
 
     var teamID: String? {
         entitlements["com.apple.developer.team-identifier"] as? String
+    }
+
+    /// "TEAMID.bundle.id" the binary is signed for; iOS refuses to launch a
+    /// binary whose bundle id it does not cover.
+    var applicationID: String? {
+        entitlements["application-identifier"] as? String
+    }
+
+    /// Whether the signed application-identifier covers this bundle id
+    /// (exactly or with a "TEAMID.*" style wildcard).
+    func covers(bundleID: String) -> Bool? {
+        guard let appID = applicationID, let dot = appID.firstIndex(of: ".") else { return nil }
+        let pattern = String(appID[appID.index(after: dot)...])
+        if pattern == "*" { return true }
+        if pattern.hasSuffix(".*") { return bundleID.hasPrefix(String(pattern.dropLast(1))) }
+        return pattern == bundleID
     }
 
     /// This process's own binary.

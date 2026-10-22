@@ -122,6 +122,8 @@ final class VPNController: ObservableObject {
         sawConnecting = false
         lastTunnelLog = nil
         Shared.writeError(nil)
+        Shared.resetLog()
+        Shared.appendLog("\(Shared.timestamp()) [APP] Нажато «подключить»")
         Task {
             let m = manager ?? NETunnelProviderManager()
             let proto = NETunnelProviderProtocol()

@@ -3,6 +3,7 @@ import UIKit
 
 struct ContentView: View {
     @EnvironmentObject var vpn: VPNController
+    @EnvironmentObject var updater: Updater
     @State private var showEnter = false
     @State private var showLog = false
     @State private var confirmDelete = false
@@ -27,6 +28,12 @@ struct ContentView: View {
                         statusBlock
                             .padding(.top, 12)
 
+                        if let r = updater.available {
+                            UpdateCard(build: r.build) { updater.download() }
+                                .padding(.top, 24)
+                                .transition(.scale(scale: 0.94, anchor: .top).combined(with: .opacity))
+                        }
+
                         if vpn.state == .on {
                             ConnectedGroup(rx: vpn.rx, tx: vpn.tx, transport: vpn.transport)
                                 .padding(.top, 28)
@@ -44,10 +51,13 @@ struct ContentView: View {
                         keySection
                             .padding(.top, 32)
 
-                        Text("Hiseng VPN \(Self.version) · на основе OpenFlux")
+                        AboutSection()
+                            .padding(.top, 28)
+
+                        Text("Hiseng VPN · на основе OpenFlux (GPL-3.0)")
                             .font(.m3(.bodySmall))
                             .foregroundColor(M3.onSurfaceVariant.opacity(0.7))
-                            .padding(.top, 28)
+                            .padding(.top, 20)
                     }
                     .padding(.horizontal, 16)
                     .padding(.bottom, 100)
@@ -76,16 +86,14 @@ struct ContentView: View {
         .animation(M3Motion.spatial, value: vpn.errorText)
         .animation(M3Motion.spatial, value: vpn.toast)
         .animation(M3Motion.effects, value: confirmDelete)
+        .animation(M3Motion.spatial, value: updater.available)
+        .task { await updater.check() }
         .sheet(isPresented: $showEnter) {
             EnterKeySheet().environmentObject(vpn).m3Sheet(large: true)
         }
         .sheet(isPresented: $showLog) {
             LogSheet().environmentObject(vpn).m3Sheet()
         }
-    }
-
-    static var version: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
     }
 
     // MARK: top bar
@@ -593,5 +601,107 @@ struct LogSheet: View {
 
     private func reload() {
         vpn.fetchLog { text in log = text }
+    }
+}
+
+// MARK: - Updates
+
+struct UpdateCard: View {
+    var build: Int
+    var download: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 14) {
+                ShapeIcon(system: "arrow.down", shape: .sunny,
+                          container: M3.primary, content: M3.onPrimary, size: 48)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Доступно обновление")
+                        .font(.m3(.titleMedium, emphasized: true))
+                        .foregroundColor(M3.onPrimaryContainer)
+                    Text("Сборка \(build) · у вас \(Updater.currentBuild)")
+                        .font(.m3(.bodyMedium))
+                        .foregroundColor(M3.onPrimaryContainer.opacity(0.8))
+                }
+            }
+            Text("Скачайте IPA и откройте её в программе, которой вы подписываете приложения. Если добавить источник обновлений (ниже), новые версии будут появляться прямо там.")
+                .font(.m3(.bodyMedium))
+                .foregroundColor(M3.onPrimaryContainer)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(action: download) {
+                Label("Скачать обновление", systemImage: "arrow.down.circle.fill")
+            }
+            .buttonStyle(M3Button(.filled, height: 52))
+        }
+        .padding(20)
+        .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(M3.primaryContainer))
+    }
+}
+
+struct AboutSection: View {
+    @EnvironmentObject var vpn: VPNController
+    @EnvironmentObject var updater: Updater
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("О приложении")
+                .font(.m3(.labelLarge, emphasized: true))
+                .foregroundColor(M3.primary)
+                .padding(.leading, 16)
+                .padding(.bottom, 10)
+            VStack(spacing: 3) {
+                HStack(spacing: 16) {
+                    ShapeIcon(system: "info", shape: .cookie7, container: M3.secondaryContainer,
+                              content: M3.onSecondaryContainer, size: 44)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Версия")
+                            .font(.m3(.titleMedium))
+                            .foregroundColor(M3.onSurface)
+                        Text(Updater.versionText)
+                            .font(.m3(.bodyMedium))
+                            .foregroundColor(M3.onSurfaceVariant)
+                    }
+                    Spacer(minLength: 0)
+                    Button {
+                        Task {
+                            if let msg = await updater.check(manual: true) { vpn.show(msg) }
+                        }
+                    } label: {
+                        if updater.checking {
+                            LoadingIndicator(color: M3.onSecondaryContainer).frame(width: 22, height: 22)
+                        } else {
+                            Text("Проверить")
+                        }
+                    }
+                    .buttonStyle(M3Button(.tonal, height: 40, fill: false))
+                }
+                .padding(16)
+                .segment(.top)
+
+                HStack(spacing: 16) {
+                    ShapeIcon(system: "square.stack.3d.down.right", shape: .clover4, container: M3.tertiaryContainer,
+                              content: M3.onTertiaryContainer, size: 44)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Источник обновлений")
+                            .font(.m3(.titleMedium))
+                            .foregroundColor(M3.onSurface)
+                        Text("Добавьте в ESign, Feather или AltStore — обновления будут приходить туда")
+                            .font(.m3(.bodyMedium))
+                            .foregroundColor(M3.onSurfaceVariant)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                    Button {
+                        UIPasteboard.general.string = Updater.sourceURL
+                        vpn.show("Ссылка на источник скопирована")
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                    }
+                    .buttonStyle(M3IconButton(size: 44))
+                }
+                .padding(16)
+                .segment(.bottom)
+            }
+        }
     }
 }
