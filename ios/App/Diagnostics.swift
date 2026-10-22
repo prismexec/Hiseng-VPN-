@@ -62,9 +62,6 @@ enum Diagnostics {
         guard let t = tunnel else {
             return "В установленном приложении нет модуля туннеля (HisengTunnel.appex). Программа, которой вы подписывали IPA, удалила расширения — включите в ней сохранение расширений (PlugIns / App Extensions) и переустановите."
         }
-        if let s = t.signing, let id = t.bundleID, s.covers(bundleID: id) == false {
-            return "Модуль туннеля подписан чужим профилем: его подпись выдана для «\(s.applicationID ?? "?")», а сам он — «\(id)». iOS такой модуль не запускает. Программа подписи должна подписывать расширение отдельным профилем (для «\(id)») — включите в ней подпись расширений / автоматическую регистрацию App ID или используйте другой сервис подписи."
-        }
         if let s = t.signing, !s.hasPacketTunnel {
             return "Модуль туннеля подписан без права на VPN (Network Extension). Сертификат, которым подписано приложение, не позволяет VPN-приложения: iOS не даёт туннелю запуститься. Нужен сертификат разработчика с возможностью Network Extensions (или установка через TrollStore)."
         }
@@ -128,7 +125,7 @@ enum Diagnostics {
 
     private static func match(_ s: Signing?, _ id: String?) -> String {
         guard let s = s, let id = id, let ok = s.covers(bundleID: id) else { return "не удалось проверить" }
-        return ok ? "совпадает" : "НЕ СОВПАДАЕТ с \(id)"
+        return ok ? "совпадает" : "не совпадает с \(id) (сервисы подписи так делают, iOS обычно это терпит)"
     }
 
     private static func yes(_ v: Bool?, unknown: Bool) -> String {

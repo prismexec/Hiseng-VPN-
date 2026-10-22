@@ -276,6 +276,47 @@ struct ContentView: View {
 
 /// Keeps the hero turning and eases its speed between states, so stopping or
 /// speeding up never jumps.
+/// Morphs the hero between state shapes with a spring and crossfades its
+/// colour, driven by the same frame clock as the rotation.
+private final class Morpher {
+    struct Frame {
+        var shape: ShapeProfile
+        var previous: VPNState
+        var colour: Double
+    }
+
+    private var from = ShapeProfile(r: [])
+    private var to = ShapeProfile(r: [])
+    private var start: TimeInterval = 0
+    private var previous: VPNState?
+    private var current: VPNState?
+
+    func frame(state: VPNState, target: ShapeProfile, at t: TimeInterval) -> Frame {
+        if current == nil {
+            current = state
+            previous = state
+            from = target
+            to = target
+            start = t - 10
+        } else if state != current {
+            from = shape(at: t)
+            previous = current
+            current = state
+            to = target
+            start = t
+        }
+        let colour = min(1, max(0, (t - start) / 0.45))
+        return Frame(shape: shape(at: t), previous: previous ?? state, colour: colour)
+    }
+
+    private func shape(at t: TimeInterval) -> ShapeProfile {
+        let p = min(1, max(0, (t - start) / 0.75))
+        // Damped spring: a little overshoot, then settles.
+        let e = p >= 1 ? 1 : 1 - exp(-6 * p) * cos(9 * p)
+        return from.lerp(to: to, e)
+    }
+}
+
 private final class Spinner {
     private(set) var angle = 0.0
     private var speed = 0.0
@@ -294,6 +335,7 @@ struct HeroButton: View {
     var state: VPNState
     var action: () -> Void
     @State private var spinner = Spinner()
+    @State private var morpher = Morpher()
 
     private var busy: Bool {
         state == .connecting || state == .reconnecting || state == .disconnecting
@@ -308,7 +350,7 @@ struct HeroButton: View {
         }
     }
 
-    private var container: Color {
+    private static func container(_ state: VPNState) -> Color {
         switch state {
         case .off: return M3.surfaceContainerHighest
         case .connecting, .reconnecting, .disconnecting: return M3.primaryContainer
@@ -336,33 +378,44 @@ struct HeroButton: View {
     }
 
     var body: some View {
-        TimelineView(.animation) { ctx in
-            let a = spinner.advance(to: ctx.date.timeIntervalSinceReferenceDate, target: speed)
+        Button(action: action) {
             ZStack {
-                Button(action: action) {
+                // Shape, colour and turn are all computed per frame here, so
+                // the morph and the rotation never fight a SwiftUI animation.
+                TimelineView(.animation) { ctx in
+                    let t = ctx.date.timeIntervalSinceReferenceDate
+                    let a = spinner.advance(to: t, target: speed)
+                    let f = morpher.frame(state: state, target: shape.profile, at: t)
                     ZStack {
-                        MorphShape(shape)
-                            .fill(container)
-                            .rotationEffect(.degrees(a))
-                        if busy {
-                            LoadingIndicator(color: content)
-                                .frame(width: 88, height: 88)
-                                .transition(.scale(scale: 0.4).combined(with: .opacity))
-                        } else {
-                            Image(systemName: "power")
-                                .font(.system(size: 72, weight: .semibold))
-                                .foregroundColor(content)
-                                .transition(.scale(scale: 0.4).combined(with: .opacity))
-                        }
+                        MorphShape(profile: f.shape)
+                            .fill(Self.container(f.previous))
+                        MorphShape(profile: f.shape)
+                            .fill(Self.container(state))
+                            .opacity(f.colour)
                     }
-                    .frame(width: 236, height: 236)
-                    .contentShape(Circle())
+                    .rotationEffect(.degrees(a))
                 }
-                .buttonStyle(BouncyPress())
-                .accessibilityLabel(state == .on ? "Отключить VPN" : "Подключить VPN")
+
+                ZStack {
+                    if busy {
+                        LoadingIndicator(color: content)
+                            .frame(width: 88, height: 88)
+                            .transition(.scale(scale: 0.4).combined(with: .opacity))
+                    } else {
+                        Image(systemName: "power")
+                            .font(.system(size: 72, weight: .semibold))
+                            .foregroundColor(content)
+                            .transition(.scale(scale: 0.4).combined(with: .opacity))
+                    }
+                }
+                .animation(M3Motion.spatial, value: busy)
+                .animation(M3Motion.effects, value: state)
             }
+            .frame(width: 236, height: 236)
+            .contentShape(Circle())
         }
-        .animation(M3Motion.spatialSlow, value: state)
+        .buttonStyle(BouncyPress())
+        .accessibilityLabel(state == .on ? "Отключить VPN" : "Подключить VPN")
     }
 }
 
