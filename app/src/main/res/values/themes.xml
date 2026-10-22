@@ -1,9 +1,4 @@
 <resources>
-    <style name="AppTheme" parent="Theme.MaterialComponents.NoActionBar">
-        <item name="colorPrimary">@color/accent</item>
-        <item name="colorSecondary">@color/green</item>
-        <item name="android:windowBackground">@color/bg</item>
-        <item name="android:statusBarColor">@color/bg</item>
-        <item name="android:navigationBarColor">@color/bg</item>
+    <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
     </style>
 </resources>

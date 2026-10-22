@@ -1,16 +1,17 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
     namespace = "best.quasar.vpn"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "best.quasar.vpn"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 35
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
         versionName = "1.0." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
@@ -18,10 +19,10 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file(System.getenv("KEYSTORE_FILE") ?: "release.jks")
-            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "quasar123"
-            keyAlias = System.getenv("KEY_ALIAS") ?: "quasar"
-            keyPassword = System.getenv("KEY_PASSWORD") ?: "quasar123"
+            storeFile = file("release.jks")
+            storePassword = "quasar123"
+            keyAlias = "quasar"
+            keyPassword = "quasar123"
         }
     }
 
@@ -36,12 +37,16 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+    buildFeatures { compose = true }
     packaging { jniLibs { useLegacyPackaging = true } }
 }
 
 dependencies {
     implementation(files("libs/openflux.aar"))
     implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.appcompat:appcompat:1.7.0")
-    implementation("com.google.android.material:material:1.12.0")
+    implementation("androidx.activity:activity-compose:1.10.1")
+    implementation(platform("androidx.compose:compose-bom:2025.06.00"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material3:material3:1.4.0")
 }
