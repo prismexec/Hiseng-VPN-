@@ -26,8 +26,7 @@ app = {
     "subtitle": "VPN на OpenFlux",
     "localizedDescription": about,
     "iconURL": icon,
-    "tintColor": "6750A4",
-    "category": "utilities",
+    "tintColor": "#6750A4",
     "versions": [{
         "version": version,
         "buildVersion": build,
@@ -43,7 +42,6 @@ app = {
     "versionDescription": notes,
     "downloadURL": url,
     "size": size,
-    "appPermissions": {"entitlements": [], "privacy": {}},
 }
 
 json.dump({
@@ -51,7 +49,8 @@ json.dump({
     "identifier": "com.hiseng.vpn.source",
     "subtitle": "Обновления Hiseng VPN",
     "iconURL": icon,
-    "tintColor": "6750A4",
+    "tintColor": "#6750A4",
+    "website": f"https://github.com/{REPO}",
     "apps": [app],
     "news": [],
 }, sys.stdout, ensure_ascii=False, indent=2)

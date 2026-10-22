@@ -19,7 +19,7 @@ final class Updater: ObservableObject {
     /// Public releases repo first; the main repo answers once it is public.
     static let repos = ["prismexec/hiseng-vpn-releases", "prismexec/Hiseng-VPN-"]
     /// AltStore-format source; ESign, Feather and AltStore show updates from it.
-    static let sourceURL = "https://raw.githubusercontent.com/\(repos[0])/main/altstore.json"
+    static let sourceURL = "https://raw.githubusercontent.com/prismexec/Hiseng-VPN-/main/altstore.json"
 
     static var currentBuild: Int {
         Int(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "") ?? 0
