@@ -131,7 +131,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         case 2: base = "Ключ содержит неизвестный канал."
         case 3: base = "Не удалось подключиться к каналу сервера. Проверьте интернет и что сервер работает."
         case 4: base = "Адрес уже занят."
-        case 5: base = "Внутренняя ошибка ядра OpenFlux."
+        case 5: base = "Внутренняя ошибка ядра VPN."
         case 6: base = "Неверный секрет шифрования в ключе."
         default: base = "Ошибка запуска (код \(rc))."
         }

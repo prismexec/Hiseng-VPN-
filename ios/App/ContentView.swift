@@ -55,7 +55,7 @@ struct ContentView: View {
                         AboutSection()
                             .padding(.top, 28)
 
-                        Text("Hiseng VPN · на основе OpenFlux (GPL-3.0)")
+                        Text("Hiseng VPN · GPL-3.0 · исходный код: github.com/prismexec/Hiseng-VPN-")
                             .font(.m3(.bodySmall))
                             .foregroundColor(M3.onSurfaceVariant.opacity(0.7))
                             .padding(.top, 20)

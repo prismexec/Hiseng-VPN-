@@ -181,8 +181,8 @@ struct KeyProfile {
     /// Words the core's share.Code* for the user.
     static func describe(code: String, param: String?) -> String {
         switch code {
-        case "not_link": return "Это не ключ OpenFlux"
-        case "unsupported_version": return "Ключ от более новой версии OpenFlux"
+        case "not_link": return "Это не ключ Hiseng VPN"
+        case "unsupported_version": return "Ключ от более новой версии приложения — обновите его"
         case "case_changed": return "Ключ испорчен: изменился регистр букв (часто так делают мессенджеры)"
         case "damaged": return "Ключ повреждён или обрезан при копировании"
         case "too_large": return "Ключ слишком длинный"
