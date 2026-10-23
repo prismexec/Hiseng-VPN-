@@ -50,6 +50,8 @@ class FluxVpnService : VpnService() {
         VpnState.set(Status.CONNECTING, "Подключаемся…")
         try {
             mobile.Mobile.setLowMemory(false)
+            // The core logs every packet by default; keep operational errors only.
+            mobile.Mobile.setDebugLevel(0)
             val specs = mobile.Mobile.shareSessionSpecs(link)
             val secret = JSONObject(mobile.Mobile.parseShareLink(link)).optString("secret")
             val err = mobile.Mobile.startSession(specs, secret)

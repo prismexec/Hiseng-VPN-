@@ -20,6 +20,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// Why the start failed; the tunnel stays up without routes for a while
     /// so the app can ask.
     private var failure: String?
+    private var ticks = 0
 
     // MARK: start / stop
 
@@ -108,6 +109,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     private func startCore(_ p: KeyProfile) -> Int32 {
+        // The core logs every packet by default; in a 50 MB extension that
+        // costs memory and CPU, so keep only its operational errors.
+        OpenFluxSetDebugLevel(0)
         if p.mode == "stream" {
             return p.streamType.withCString { t in
                 p.streamURL.withCString { u in
@@ -215,6 +219,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             let seen = self.connectedOnce
             self.lock.unlock()
             if first { self.note("Канал до сервера установлен, \(Shared.memoryLine())") }
+            self.ticks += 1
+            if self.ticks % 15 == 0 { self.note("Работает, \(Shared.memoryLine())") }
             if seen && self.reasserting == on {
                 self.reasserting = !on
                 self.note(on ? "Связь восстановлена" : "Связь потеряна, переподключаемся…")

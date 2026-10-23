@@ -62,6 +62,12 @@ enum Diagnostics {
         guard let t = tunnel else {
             return "В установленном приложении нет модуля туннеля (HisengTunnel.appex). Программа, которой вы подписывали IPA, удалила расширения — включите в ней сохранение расширений (PlugIns / App Extensions) и переустановите."
         }
+        if let app = Signing.current, let appID = app.applicationID, let bundle = Bundle.main.bundleIdentifier,
+           let dot = appID.firstIndex(of: "."),
+           case let id = String(appID[appID.index(after: dot)...]),
+           !id.contains("*"), !bundle.contains(id) {
+            return "Сертификат выдан на один идентификатор «\(id)», а приложение подписано как «\(bundle)». С таким сертификатом iOS не запускает VPN-модуль. Переподпиши приложение в Feather, указав Bundle ID: \(id)"
+        }
         if let s = t.signing, !s.hasPacketTunnel {
             return "Модуль туннеля подписан без права на VPN (Network Extension). Сертификат, которым подписано приложение, не позволяет VPN-приложения: iOS не даёт туннелю запуститься. Нужен сертификат разработчика с возможностью Network Extensions (или установка через TrollStore)."
         }
