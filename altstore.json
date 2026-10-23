@@ -16,11 +16,11 @@
       "tintColor": "#6750A4",
       "versions": [
         {
-          "version": "1.2.14",
-          "date": "2026-10-22T22:43:43Z",
-          "localizedDescription": "Сборка 14",
-          "downloadURL": "https://github.com/prismexec/Hiseng-VPN-/releases/download/ios-14/HisengVPN-ios-14.ipa",
-          "size": 24098292,
+          "version": "1.2.16",
+          "date": "2026-10-23T06:55:07Z",
+          "localizedDescription": "Сборка 16",
+          "downloadURL": "https://github.com/prismexec/Hiseng-VPN-/releases/download/ios-16/HisengVPN-ios-16.ipa",
+          "size": 24101631,
           "minOSVersion": "15.0"
         }
       ],
